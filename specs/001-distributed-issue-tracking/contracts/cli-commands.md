@@ -42,12 +42,13 @@ Error: Git repository not found: /invalid/path
 ---
 
 ### `odi issue create`
-**Purpose**: Create new issue in current project
+**Purpose**: Create new issue in specified or active project
 
 **Usage**: `odi issue create <TITLE> [OPTIONS]`
 
 **Arguments**:
 - `<TITLE>`: Issue title (required, 1-100 characters)
+- `--project <PROJECT>`: Target project (optional, uses default from config)
 - `--description <TEXT>`: Issue description (optional)
 - `--assignee <USER>`: Assign to user (optional, multiple allowed)
 - `--label <LABEL>`: Add label (optional, multiple allowed)
@@ -55,23 +56,25 @@ Error: Git repository not found: /invalid/path
 
 **Input Validation**:
 - Title must be 1-100 characters, non-empty
+- Project must exist if specified, or workspace must have default project
 - Assignees must be valid user IDs
-- Labels must exist in current project
+- Labels must exist in target project
 - Priority must be valid enum value
 
 **Output Contract**:
 ```
 SUCCESS (exit 0):
-Created issue #a1b2c3d4: Fix login validation bug
+Created issue #a1b2c3d4 in project 'backend-api': Fix login validation bug
 Assigned to: @john, @sarah
-Labels: bug, frontend
+Labels: bug, security
 Priority: high
 
 ERROR (exit 1):
 Error: Issue title cannot be empty
+Error: Project not found: invalid-project
 Error: User not found: @invalid-user  
-Error: Label not found: invalid-label
-Error: Not in ODI repository (run 'odi init' first)
+Error: Label not found in project 'backend-api': invalid-label
+Error: No default project set (specify --project or set workspace.default_project)
 ```
 
 **Side Effects**:
@@ -153,31 +156,35 @@ JSON FORMAT:
 ---
 
 ### `odi remote add`
-**Purpose**: Add remote repository connection
+**Purpose**: Add remote repository connection to workspace
 
 **Usage**: `odi remote add <NAME> <URL> [OPTIONS]`
 
 **Arguments**:
 - `<NAME>`: Remote name identifier (origin, upstream, etc.)
 - `<URL>`: Remote repository URL (SSH or HTTPS)
+- `--projects <PROJECT...>`: Projects to sync via this remote (optional, defaults to all active)
 - `--auth <METHOD>`: Authentication method (ssh-key|token|oauth)
 
 **Input Validation**:
 - Name must be valid identifier format
 - URL must be valid SSH or HTTPS format
+- Projects must exist in current workspace if specified
 - Auth method must be supported
-- Remote name must not already exist
+- Remote name must not already exist in workspace
 
 **Output Contract**:
 ```
 SUCCESS (exit 0):
-Added remote 'origin': https://issues.example.com/project.git
+Added remote 'origin': https://issues.example.com/repo.git
+Projects: backend-api, frontend, docs
 Authentication: SSH key (~/.ssh/id_rsa)
 
 ERROR (exit 1):
 Error: Invalid remote name: 'invalid name'
 Error: Invalid URL format: not-a-url
 Error: Remote already exists: origin
+Error: Project not found in workspace: invalid-project
 Error: Authentication failed: invalid SSH key
 ```
 

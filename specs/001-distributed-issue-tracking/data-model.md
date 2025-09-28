@@ -78,7 +78,7 @@ Open → InProgress → Resolved → Closed
 - Must have at least one member (creator)
 
 ### Project
-**Purpose**: Container for related issues with configuration and team assignments
+**Purpose**: Logical container for related issues, independent of working directory location
 
 **Fields**:
 - `id`: ProjectId - Unique identifier (project name format)
@@ -87,8 +87,7 @@ Open → InProgress → Resolved → Closed
 - `issues`: Vec<IssueId> - Associated issue IDs
 - `teams`: Vec<TeamId> - Teams with project access
 - `labels`: Vec<Label> - Available labels for issues
-- `git_repository`: Option<GitRepository> - Associated Git repo
-- `remotes`: Vec<Remote> - Remote repository connections
+- `workspaces`: Vec<WorkspaceId> - Working directories using this project
 - `settings`: ProjectSettings - Project-specific configuration
 - `created_at`: DateTime<Utc> - Creation timestamp  
 - `updated_at`: DateTime<Utc> - Last modification timestamp
@@ -97,7 +96,7 @@ Open → InProgress → Resolved → Closed
 - ID must match regex `^[a-zA-Z0-9_.-]+$` (3-100 characters)
 - Name must be non-empty and ≤ 100 characters
 - Teams must be valid team IDs
-- Git repository path must be valid if specified
+- Must be associated with at least one workspace
 
 ### Label
 **Purpose**: Categorization tag with visual representation for issue organization
@@ -115,6 +114,24 @@ Open → InProgress → Resolved → Closed
 - Color must be valid hex format (#[0-9A-Fa-f]{6})
 - Name must be unique within project
 
+### Workspace
+**Purpose**: Working directory that can contain multiple projects and their remotes
+
+**Fields**:
+- `id`: WorkspaceId - Unique identifier (path-based hash)
+- `path`: PathBuf - Absolute path to working directory
+- `projects`: Vec<ProjectId> - Projects active in this workspace
+- `remotes`: Vec<Remote> - Remote repository connections for projects
+- `git_repository`: Option<GitRepository> - Associated Git repo
+- `created_at`: DateTime<Utc> - Creation timestamp
+- `updated_at`: DateTime<Utc> - Last modification timestamp
+
+**Validation Rules**:
+- Path must be absolute and accessible
+- Projects must be valid project IDs
+- Git repository path must be valid if specified
+- At least one project must be active
+
 ### Remote
 **Purpose**: External repository connection with protocol and synchronization state
 
@@ -124,6 +141,7 @@ Open → InProgress → Resolved → Closed
 - `url`: String - Repository URL (SSH or HTTPS)
 - `protocol`: Protocol - Connection type (SSH, HTTPS)
 - `auth`: AuthConfig - Authentication configuration
+- `projects`: Vec<ProjectId> - Projects synchronized via this remote
 - `last_sync`: Option<DateTime<Utc>> - Last successful sync
 - `sync_state`: SyncState - Current synchronization status
 - `created_at`: DateTime<Utc> - Creation timestamp
@@ -133,21 +151,53 @@ Open → InProgress → Resolved → Closed
 - URL must be valid SSH or HTTPS format
 - Protocol must match URL scheme
 - Auth config must be valid for protocol type
+- Must be associated with at least one project
 
 ### Config
-**Purpose**: Hierarchical settings with global and local scopes
+**Purpose**: Unified configuration file with all settings sections
 
-**Fields**:
-- `user`: UserConfig - User identity and preferences
-- `project`: ProjectConfig - Project-specific settings
-- `remote`: RemoteConfig - Default remote settings
-- `ui`: UiConfig - Interface preferences
-- `sync`: SyncConfig - Synchronization behavior
+**TOML Structure**:
+```toml
+[user]
+name = "John Developer"  
+email = "john@example.com"
+ssh_key = "~/.ssh/id_rsa"
+
+[workspace]
+active_projects = ["project1", "project2"]
+default_assignee = "@john"
+
+[project.project1] 
+name = "Main Project"
+default_labels = ["bug", "feature"]
+git_integration = true
+
+[project.project2]
+name = "Documentation"  
+default_labels = ["docs"]
+git_integration = false
+
+[remote.origin]
+url = "https://issues.example.com/repo.git"
+protocol = "https"
+projects = ["project1", "project2"]
+
+[ui]
+color = "auto"
+pager = true
+editor = "vim"
+
+[sync]
+auto_pull = false
+conflict_strategy = "manual"
+compress_objects = true
+```
 
 **Validation Rules**:
-- All nested configs must pass individual validation
-- Required fields must be present (user.name, user.email)
-- Optional fields have sensible defaults
+- Required: user.name, user.email
+- Projects referenced in workspace.active_projects must exist in [project.*]
+- Remotes referenced must have valid URLs and protocols
+- All file paths must be accessible
 
 ## Supporting Types
 
@@ -186,38 +236,43 @@ pub struct AuthConfig {
 - **User** ←→ **Team**: Many-to-many (users belong to multiple teams)
 - **Team** ←→ **Project**: Many-to-many (teams access multiple projects)  
 - **Project** ←→ **Issue**: One-to-many (project contains multiple issues)
+- **Project** ←→ **Workspace**: Many-to-many (projects can exist in multiple workspaces)
+- **Workspace** ←→ **Remote**: One-to-many (workspace has multiple remotes)
+- **Remote** ←→ **Project**: Many-to-many (remote can sync multiple projects)
 - **Issue** ←→ **User**: Many-to-many (assignees), One-to-many (author)
 - **Issue** ←→ **Label**: Many-to-many (issues have multiple labels)
-- **Project** ←→ **Remote**: One-to-many (project has multiple remotes)
 
 ### Data Dependencies
 - Issues depend on Users (author, assignees) and Projects
 - Teams depend on Users (members) and Projects (access)
-- Remotes depend on Projects (ownership) and Auth (credentials)
+- Workspaces depend on Projects (active projects) and Remotes (connections)
+- Remotes depend on Projects (synchronization scope) and Auth (credentials)
 - Labels depend on Projects (scoped definition)
 
 ## Storage Implementation
 
-### File Structure
+### File Structure (Git-like Object Store)
 ```
 .odi/
-├── config.toml           # Local project configuration
-├── issues/
-│   ├── {issue-id}.json   # Individual issue files
-│   └── index.toml        # Issue index and metadata
-├── users.toml            # User definitions and team memberships
-├── projects.toml         # Project metadata and settings
-├── labels.toml           # Label definitions per project
-├── remotes.toml          # Remote repository configuration
-└── state/
-    ├── sync.toml         # Synchronization state
-    └── locks/            # File locking for concurrent access
+├── config                # Single TOML configuration file (no extension)
+├── objects/              # Content-addressed object store
+│   ├── {hash[0:2]}/      # First 2 chars of hash as directory
+│   │   └── {hash[2:]}    # Remaining hash as filename
+│   └── pack/             # Packed object files (future optimization)
+├── refs/                 # Reference storage
+│   ├── issues/           # Issue references
+│   ├── projects/         # Project references  
+│   └── remotes/          # Remote references
+├── HEAD                  # Current workspace state
+└── locks/                # File locking for concurrent access
 ```
 
-### Serialization Format
-- **TOML**: Configuration files, metadata, small structured data
-- **JSON**: Issue content, large structured data, cross-language compatibility
-- **Compression**: Optional gzip for large issue collections
+### Object Storage Format
+- **Binary Format**: All objects stored as compressed binary data
+- **Content Addressing**: SHA-256 hash of object content as identifier  
+- **Object Types**: Issue, User, Team, Project, Workspace, Remote, Label
+- **Compression**: zlib compression for all stored objects
+- **Integrity**: Hash verification on read operations
 
 ### Atomic Operations
 - Use temporary files with atomic rename for consistency

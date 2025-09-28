@@ -18,20 +18,24 @@ odi --help
 
 ## Basic Workflow
 
-### 1. Project Initialization
+### 1. Workspace Initialization
 
 ```bash
-# Initialize new project
-mkdir my-project && cd my-project
-odi init
+# Initialize new workspace
+mkdir my-workspace && cd my-workspace
+odi init --project main-project
 
 # Verify initialization
 ls -la .odi/
-# Expected: config.toml, issues/, users.toml, projects.toml, remotes.toml, state/
+# Expected: config, objects/, refs/, HEAD, locks/
+
+# Check object store structure  
+find .odi/objects -type f | head -5
+# Expected: .odi/objects/{hash[0:2]}/{hash[2:]} files
 
 # Check initial configuration
-odi config get user.name
-# Expected: Prompt for user setup if not configured
+cat .odi/config
+# Expected: [workspace] active_projects = ["main-project"]
 ```
 
 ### 2. User Configuration
@@ -45,46 +49,54 @@ odi config set user.email "john@example.com"
 odi config get user.name
 # Expected: John Developer
 
-cat .odi/config.toml
-# Expected: [user] section with name and email
+cat .odi/config
+# Expected: [user] section with name and email in unified config file
 ```
 
-### 3. Issue Management
+### 3. Project and Issue Management
 
 ```bash
-# Create first issue
+# Create additional project in workspace
+odi project create frontend --description "User interface components"
+
+# Verify multiple projects
+odi project list
+# Expected: Table showing main-project and frontend
+
+# Create issue in specific project
 odi issue create "Fix login validation bug" \
+  --project main-project \
   --description "Users can login with invalid credentials" \
   --priority high \
   --label bug
 
-# Verify issue creation
+# Verify issue creation and object storage
 odi issue list
 # Expected: Table showing new issue with ID, title, status (Open), priority (high)
+
+# Check object store contains issue data
+find .odi/objects -name "*" -type f | wc -l
+# Expected: Multiple object files (issue, project objects, etc.)
 
 # Get specific issue details
 ISSUE_ID=$(odi issue list --format json | jq -r '.[0].id')
 odi issue show $ISSUE_ID
-# Expected: Full issue details including description, labels, timestamps
+# Expected: Full issue details including project association
 
-# Create second issue
-odi issue create "Add user registration" \
+# Create issue in different project  
+odi issue create "Update button styling" \
+  --project frontend \
   --assignee @john \
-  --label feature \
+  --label ui \
   --priority medium
 
-# List all issues
-odi issue list
-# Expected: Two issues in table format
+# List issues across all projects
+odi issue list --all-projects
+# Expected: Issues from both main-project and frontend
 
-# Filter issues by label
-odi issue list --label bug
-# Expected: Only the login validation issue
-
-# Update issue status
-odi issue update $ISSUE_ID --status InProgress
-odi issue show $ISSUE_ID | grep "Status:"
-# Expected: Status: InProgress
+# Filter issues by project
+odi issue list --project main-project
+# Expected: Only issues from main-project
 ```
 
 ### 4. Team Management
@@ -152,55 +164,69 @@ odi issue link $ISSUE_ID HEAD
 ### 7. Remote Repository Setup
 
 ```bash
-# Add remote repository (simulation with local path)
+# Add remote repository for multiple projects
 mkdir -p ../remote-repo
-odi remote add origin file://../remote-repo
+odi remote add origin file://../remote-repo \
+  --projects main-project,frontend
 
-# Verify remote configuration
+# Verify remote configuration  
 odi remote list
-# Expected: origin remote with file:// URL
+# Expected: origin remote with file:// URL and associated projects
+
+# Check unified config has remote section
+cat .odi/config | grep -A 5 "\[remote.origin\]"
+# Expected: [remote.origin] section with URL and projects list
 
 # Initial push to remote
 odi remote push origin
-# Expected: Pushed issues and metadata to remote repository
+# Expected: Pushed objects and refs for both projects to remote repository
 ```
 
-### 8. Collaboration Simulation
+### 8. Multi-Project Collaboration
 
 ```bash
-# Simulate second developer
+# Simulate second developer workspace
 cd ..
 mkdir developer-2 && cd developer-2
 
-# Clone from remote
+# Clone workspace from remote
 odi clone file://../remote-repo .
-# Expected: Downloaded project with issues and configuration
+# Expected: Downloaded workspace with both projects and all objects
 
-# Verify cloned data
-odi issue list
-# Expected: Same issues as original repository
+# Verify cloned data and projects
+odi project list
+# Expected: main-project and frontend projects available
 
-# Create new issue as second developer
+odi issue list --all-projects  
+# Expected: Issues from both projects
+
+# Create new project as second developer
 odi config set user.name "Sarah Developer"
 odi config set user.email "sarah@example.com"
 
-odi issue create "Update documentation" \
+odi project create documentation --description "Project documentation"
+
+odi issue create "Update API documentation" \
+  --project documentation \
   --assignee @sarah \
-  --label documentation \
+  --label docs \
   --priority low
 
-# Push changes
+# Push changes including new project
 odi remote push origin
 
 # Return to first developer
-cd ../my-project
+cd ../my-workspace
 
 # Pull changes from remote
 odi remote pull origin
-# Expected: Downloaded new issue from second developer
+# Expected: Downloaded new project and issue from second developer
 
-odi issue list
-# Expected: Three issues total (including Sarah's documentation issue)
+odi project list
+# Expected: Three projects total (including Sarah's documentation project)
+
+odi issue list --all-projects
+# Expected: Issues from all three projects
 ```
 
 ### 9. Conflict Resolution
@@ -239,7 +265,7 @@ odi remote push origin
 ```bash
 # Set global configuration
 mkdir -p ~/.odi
-cat > ~/.odi/config.toml << EOF
+cat > ~/.odi/config << EOF
 [user]
 name = "John Developer"
 email = "john@example.com"
@@ -252,13 +278,30 @@ color = "auto"
 auto_pull = false
 EOF
 
-# Override in local project
-cat >> .odi/config.toml << EOF
+# Override in local workspace
+cat >> .odi/config << EOF
 [ui]
 color = "always"
 
-[project]
-default_assignee = "@john"
+[workspace] 
+default_project = "main-project"
+active_projects = ["main-project", "frontend", "documentation"]
+
+[project.main-project]
+name = "Main Application"
+default_labels = ["bug", "feature", "security"]
+
+[project.frontend]  
+name = "User Interface"
+default_labels = ["ui", "ux", "accessibility"]
+
+[project.documentation]
+name = "Documentation"
+default_labels = ["docs", "tutorial", "api"]
+
+[remote.origin]
+url = "file://../remote-repo"
+projects = ["main-project", "frontend", "documentation"]
 EOF
 
 # Test configuration hierarchy
@@ -268,29 +311,58 @@ odi config get user.name
 odi config get ui.color
 # Expected: always (local override)
 
-odi config get sync.auto_pull
-# Expected: false (from global, no local override)
+odi config get workspace.default_project
+# Expected: main-project (local only)
+
+# Test project-specific configuration
+odi config get project.main-project.default_labels
+# Expected: ["bug", "feature", "security"]
 ```
 
-### 11. Performance and Scale Testing
+### 11. Object Store and Performance Testing
 
 ```bash
-# Create multiple issues for performance testing
-for i in {1..100}; do
-  odi issue create "Performance test issue $i" --priority low
+# Create multiple issues across projects for performance testing
+for i in {1..50}; do
+  odi issue create "Performance test issue $i" \
+    --project main-project \
+    --priority low
+done
+
+for i in {1..30}; do  
+  odi issue create "UI test issue $i" \
+    --project frontend \
+    --priority low
 done
 
 # Measure list performance
-time odi issue list
-# Expected: <100ms for 100 issues
+time odi issue list --all-projects
+# Expected: <100ms for 80+ issues across multiple projects
 
-# Test filtering performance
-time odi issue list --label bug
-# Expected: <50ms for filtered results
+# Test object store efficiency
+echo "Object store statistics:"
+find .odi/objects -type f | wc -l
+# Expected: Efficient object count (deduplication working)
 
-# Test large issue description
-odi issue create "Large issue" --description "$(head -c 10000 < /dev/zero | tr '\0' 'A')"
-# Expected: Successful creation with large content
+du -sh .odi/objects
+# Expected: Compressed storage size
+
+# Test filtering performance across projects
+time odi issue list --project main-project
+# Expected: <50ms for project-specific filtering
+
+time odi issue list --label bug --all-projects  
+# Expected: <75ms for cross-project label filtering
+
+# Test large issue content in object store
+odi issue create "Large issue test" \
+  --project main-project \
+  --description "$(head -c 10000 < /dev/zero | tr '\0' 'A')"
+# Expected: Successful creation with large binary-stored content
+
+# Verify object integrity
+odi fsck
+# Expected: All objects pass integrity checks
 ```
 
 ## Validation Checklist
@@ -348,9 +420,9 @@ odi issue create "Large issue" --description "$(head -c 10000 < /dev/zero | tr '
 ## Cleanup
 
 ```bash
-# Clean up test repositories
+# Clean up test workspaces
 cd ..
-rm -rf my-project developer-2 remote-repo
+rm -rf my-workspace developer-2 remote-repo
 
 # Remove global configuration (optional)
 rm -rf ~/.odi

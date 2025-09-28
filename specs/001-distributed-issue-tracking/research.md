@@ -61,17 +61,33 @@
 
 ### 5. Filesystem Storage Formats for Structured Data
 
-**Decision**: TOML for metadata, JSON for bulk data with compression
+**Decision**: Git-like object store with content-addressed binary storage
 **Rationale**:
-- TOML for human-readable configuration and small metadata files
-- JSON for structured data with efficient parsing and cross-language compatibility
-- Optional compression (gzip) for large datasets to reduce storage overhead
-- Atomic file operations with temporary files and rename for consistency
+- Content-addressed storage using SHA-256 hashes ensures data integrity
+- Binary format with compression optimizes storage efficiency and performance
+- Git-like structure provides familiar patterns for distributed version control
+- Object deduplication across multiple projects reduces storage overhead
+- Atomic operations with hash verification prevent corruption
 
 **Alternatives Considered**:
-- Binary formats (protobuf/msgpack): Rejected due to debugging difficulty and tooling requirements
-- SQLite embedded database: Rejected due to dependency complexity and file locking issues
-- Pure JSON: Rejected due to lack of comments for configuration files
+- JSON files in directories: Rejected due to storage inefficiency and lack of integrity checking
+- SQLite embedded database: Rejected due to dependency complexity and file locking issues across distributed systems
+- TOML for all data: Rejected due to performance issues with large datasets and binary content limitations
+
+### 6. Configuration Management Strategy
+
+**Decision**: Single unified TOML configuration file (`.odi/config`)
+**Rationale**:
+- Simplified configuration management with single source of truth
+- TOML sections provide clear organization (user, workspace, project.*, remote.*)
+- No file extension follows Git conventions (.git/config, not .git/config.toml)
+- Hierarchical structure supports multiple projects in single workspace
+- Easy to edit, version control, and merge across different environments
+
+**Alternatives Considered**:
+- Multiple specialized config files: Rejected due to complexity and synchronization issues
+- JSON configuration: Rejected due to lack of comments and less human-friendly syntax
+- Environment variables only: Rejected due to poor organization for complex nested configurations
 
 ## Architecture Decisions Summary
 
@@ -86,12 +102,17 @@ odi-net/               # Network operations - protocols, sync, authentication
 ### Data Storage Strategy
 ```
 .odi/
-├── config.toml        # Local project configuration
-├── issues/            # Individual issue files (JSON)
-├── projects.toml      # Project metadata and settings  
-├── users.toml         # User and team definitions
-├── remotes.toml       # Remote repository configuration
-└── state/             # Synchronization state and locks
+├── config             # Unified TOML configuration (no extension)
+├── objects/           # Content-addressed object store
+│   ├── {hash[0:2]}/   # First 2 chars as directory (Git pattern)
+│   │   └── {hash[2:]} # Remaining hash as compressed binary object
+│   └── pack/          # Packed objects (future optimization)
+├── refs/              # Reference pointers to objects
+│   ├── issues/        # Issue ID → object hash mappings
+│   ├── projects/      # Project ID → object hash mappings
+│   └── remotes/       # Remote sync state
+├── HEAD               # Current workspace state pointer
+└── locks/             # Concurrent access control
 ```
 
 ### CLI Command Architecture
@@ -122,10 +143,11 @@ odi
 - Consistent exit codes following Unix conventions
 
 ### Performance Considerations
-- Lazy loading of large datasets (issues, history)
-- Incremental synchronization to minimize network overhead  
-- Memory-mapped files for large read operations
-- Background compression of historical data
+- Content-addressed storage enables efficient deduplication across projects
+- Binary format with zlib compression minimizes I/O overhead
+- Object references allow lazy loading of large datasets
+- Incremental synchronization using object hashes minimizes network traffic
+- Memory-mapped files for large read operations on packed objects
 
 ### Security & Authentication
 - SSH key-based authentication for SSH protocol

@@ -163,16 +163,39 @@ pub enum FsError {
 ```rust
 pub trait StorageEngine {
     async fn initialize(&self, path: &Path) -> Result<()>;
-    async fn read_issue(&self, id: &IssueId) -> Result<Option<Issue>>;
-    async fn write_issue(&self, issue: &Issue) -> Result<()>;
-    async fn delete_issue(&self, id: &IssueId) -> Result<()>;
-    async fn list_issues(&self) -> Result<Vec<IssueId>>;
     
+    // Object store operations (Git-like)
+    async fn write_object<T: Serialize>(&self, obj: &T) -> Result<ObjectHash>;
+    async fn read_object<T: DeserializeOwned>(&self, hash: &ObjectHash) -> Result<Option<T>>;
+    async fn delete_object(&self, hash: &ObjectHash) -> Result<()>;
+    async fn list_objects(&self, object_type: ObjectType) -> Result<Vec<ObjectHash>>;
+    
+    // Reference operations
+    async fn write_ref(&self, name: &str, hash: &ObjectHash) -> Result<()>;
+    async fn read_ref(&self, name: &str) -> Result<Option<ObjectHash>>;
+    async fn list_refs(&self, prefix: &str) -> Result<Vec<String>>;
+    
+    // Configuration operations
     async fn read_config(&self) -> Result<Config>;
     async fn write_config(&self, config: &Config) -> Result<()>;
     
+    // Locking operations
     async fn lock(&self, resource: &str) -> Result<Lock>;
     async fn unlock(&self, lock: Lock) -> Result<()>;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ObjectHash(String); // SHA-256 hex string
+
+#[derive(Debug, Clone)]
+pub enum ObjectType {
+    Issue,
+    User,
+    Team,
+    Project,
+    Workspace,
+    Remote,
+    Label,
 }
 
 pub struct Lock {
@@ -186,7 +209,7 @@ pub struct Lock {
 ```rust
 pub trait ConfigLoader {
     fn load_global() -> Result<Option<Config>>;
-    fn load_local(project_path: &Path) -> Result<Option<Config>>;
+    fn load_local(workspace_path: &Path) -> Result<Option<Config>>;
     fn merge(global: Option<Config>, local: Option<Config>) -> Config;
     fn validate(config: &Config) -> Result<()>;
 }
@@ -194,8 +217,9 @@ pub trait ConfigLoader {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub user: UserConfig,
-    pub project: Option<ProjectConfig>,
-    pub remotes: HashMap<String, RemoteConfig>,
+    pub workspace: Option<WorkspaceConfig>,
+    pub project: HashMap<String, ProjectConfig>,
+    pub remote: HashMap<String, RemoteConfig>,
     pub ui: UiConfig,
     pub sync: SyncConfig,
 }
@@ -205,6 +229,26 @@ pub struct UserConfig {
     pub name: String,
     pub email: String,
     pub ssh_key: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkspaceConfig {
+    pub active_projects: Vec<String>,
+    pub default_assignee: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectConfig {
+    pub name: String,
+    pub default_labels: Vec<String>,
+    pub git_integration: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemoteConfig {
+    pub url: String,
+    pub protocol: String,
+    pub projects: Vec<String>,
 }
 ```
 
