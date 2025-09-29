@@ -3,7 +3,8 @@ members = [
     "odi",
     "odi-core", 
     "odi-fs",
-    "odi-net"
+    "odi-net",
+    "tests"
 ]
 resolver = "2"
 

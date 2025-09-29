@@ -1,0 +1,24 @@
+[package]
+name = "contract_tests"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Workspace crates
+odi-core = { path = "../odi-core" }
+odi-fs = { path = "../odi-fs" }
+odi-net = { path = "../odi-net" }
+
+# Shared dependencies
+chrono = { workspace = true }
+tokio = { workspace = true }
+uuid = { workspace = true }
+serde = { workspace = true }
+tempfile = { workspace = true }
+async-trait = { workspace = true }
+toml = { workspace = true }
+serde_json = { workspace = true }
+
+[[test]]
+name = "contract_tests"
+path = "contract/mod.rs"

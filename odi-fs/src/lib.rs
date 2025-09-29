@@ -1,18 +1,44 @@
-//! # ODI Filesystem
+//! ODI Filesystem operations crate
 //!
-//! Filesystem operations for ODI distributed issue tracking system.
-//! This crate provides storage, configuration, and Git integration capabilities.
+//! Provides filesystem storage, configuration management, and Git integration
+//! for the ODI distributed issue tracking system.
 
+use thiserror::Error;
+
+// Re-export main modules
 pub mod config;
-pub mod error;
-pub mod git;
 pub mod storage;
+pub mod git;
 
-// Re-exports for consumers  
-pub use config::{Config, ConfigLoader, DefaultConfigLoader};
-pub use error::{FsError, Result};
-pub use git::{DefaultGitIntegration, GitIntegration, GitRef, GitRepository};
-pub use storage::{FilesystemStorage, ObjectHash, ObjectType, StorageEngine};
+// Re-export important types
+pub use config::{Config, UserConfig, ProjectConfig, RemoteConfig, WorkspaceConfig, ConfigLoader, FileConfigLoader, load_config, save_config};
+pub use storage::{ObjectType, ObjectHash, StorageObject, ObjectRef, StorageLock, Lock, ObjectStorage, StorageEngine, FileSystemStorage};
 
-/// Current version of the ODI filesystem library
-pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+#[derive(Error, Debug)]
+pub enum FsError {
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+
+    #[error("Configuration error: {message}")]
+    ConfigError { message: String },
+
+    #[error("Storage error: {message}")]
+    StorageError { message: String },
+
+    #[error("Serialization error: {message}")]
+    SerializationError { message: String },
+
+    #[error("Lock error: {message}")]
+    LockError { message: String },
+
+    #[error("Git integration error: {message}")]
+    GitError { message: String },
+
+    #[error("TOML parsing error: {0}")]
+    TomlError(#[from] toml::de::Error),
+    
+    #[error("JSON error: {0}")]
+    JsonError(#[from] serde_json::Error),
+}
+
+pub type Result<T> = std::result::Result<T, FsError>;

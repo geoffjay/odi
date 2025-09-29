@@ -264,6 +264,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bincode"
+version = "1.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1f45e9417d87227c7a56d22e471c6206462cba514c7590c09aff4cf6d1ddcad"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "bitflags"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -501,6 +510,23 @@ dependencies = [
  "getrandom 0.2.16",
  "once_cell",
  "tiny-keccak",
+]
+
+[[package]]
+name = "contract_tests"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "odi-core",
+ "odi-fs",
+ "odi-net",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "toml",
+ "uuid",
 ]
 
 [[package]]
@@ -1723,6 +1749,7 @@ name = "odi-fs"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "bincode",
  "chrono",
  "flate2",
  "fs4",
@@ -1750,11 +1777,13 @@ dependencies = [
  "odi-core",
  "reqwest",
  "serde",
+ "serde_json",
  "tempfile",
  "thiserror 1.0.69",
  "tokio",
  "tokio-test",
  "url",
+ "uuid",
 ]
 
 [[package]]

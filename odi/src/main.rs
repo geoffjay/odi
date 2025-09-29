@@ -26,7 +26,9 @@ async fn main() -> Result<()> {
     match cli.execute().await {
         Ok(_) => Ok(()),
         Err(e) => {
-            eprintln!("Error: {}", e);
+            // T076: User-friendly error messages
+            let formatted_error = e.format_user_friendly();
+            eprintln!("{}", formatted_error);
             std::process::exit(1);
         }
     }

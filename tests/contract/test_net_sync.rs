@@ -240,22 +240,35 @@ async fn test_authentication_handling() {
 
 #[tokio::test]
 async fn test_concurrent_sync_operations() {
+    use std::sync::Arc;
+    use tokio::time::{sleep, Duration};
+    
+    #[derive(Debug)]
+    struct MockRemoteSync;
+    
+    impl MockRemoteSync {
+        async fn connect(&self, _remote: &Remote) -> Result<(), String> {
+            sleep(Duration::from_millis(100)).await;
+            Ok(())
+        }
+    }
+    
     // Test multiple concurrent sync operations
     let remote = Remote::new("concurrent".to_string(), "concurrent".to_string(), "https://test.com/repo.git".to_string());
-    let sync = MockRemoteSync;
+    let sync = Arc::new(MockRemoteSync);
     
     // Create multiple connections concurrently
     let tasks: Vec<_> = (0..5).map(|_| {
         let remote_clone = remote.clone();
-        let sync_ref = &sync;
+        let sync_clone = Arc::clone(&sync);
         tokio::spawn(async move {
-            sync_ref.connect(&remote_clone).await
+            sync_clone.connect(&remote_clone).await
         })
     }).collect();
     
     // Wait for all connections to complete
     for task in tasks {
-        let result = task.await.expect("Task should complete");
+        let _result = task.await.expect("Task should complete");
         // Each connection should succeed or fail consistently (will panic until implemented)
     }
 }

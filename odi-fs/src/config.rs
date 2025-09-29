@@ -1,199 +1,206 @@
-//! Configuration management
-
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::fs;
+use std::path::{Path, PathBuf};
+use thiserror::Error;
 
-use crate::Result;
-
-/// Main configuration structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Config {
-    pub user: UserConfig,
-    pub workspace: Option<WorkspaceConfig>,
-    pub project: HashMap<String, ProjectConfig>,
-    pub remote: HashMap<String, RemoteConfig>,
-    pub ui: UiConfig,
-    pub sync: SyncConfig,
+#[derive(Debug, Error)]
+pub enum ConfigError {
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+    
+    #[error("TOML parsing error: {0}")]
+    Toml(#[from] toml::de::Error),
+    
+    #[error("Validation error: {message}")]
+    Validation { message: String },
 }
 
-/// User configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+pub type Result<T> = std::result::Result<T, ConfigError>;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Config {
+    pub user: UserConfig,
+    pub project: ProjectConfig,
+    pub remotes: HashMap<String, RemoteConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct UserConfig {
     pub name: String,
     pub email: String,
-    pub ssh_key: Option<PathBuf>,
 }
 
-/// Workspace configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WorkspaceConfig {
-    pub active_projects: Vec<String>,
-    pub default_assignee: Option<String>,
-}
-
-/// Project configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ProjectConfig {
     pub name: String,
-    pub default_labels: Vec<String>,
-    pub git_integration: bool,
+    pub description: Option<String>,
+    pub default_branch: Option<String>,
 }
 
-/// Remote configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RemoteConfig {
     pub url: String,
     pub protocol: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct WorkspaceConfig {
+    pub name: String,
+    pub path: PathBuf,
     pub projects: Vec<String>,
-}
-
-/// UI configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UiConfig {
-    pub color: String,
-    pub pager: bool,
-    pub editor: Option<String>,
-}
-
-/// Sync configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SyncConfig {
-    pub auto_pull: bool,
-    pub conflict_strategy: String,
-    pub compress_objects: bool,
-}
-
-/// Configuration loader trait
-pub trait ConfigLoader {
-    fn load_global() -> Result<Option<Config>>;
-    fn load_local(workspace_path: &Path) -> Result<Option<Config>>;
-    fn merge(global: Option<Config>, local: Option<Config>) -> Config;
-    fn validate(config: &Config) -> Result<()>;
-}
-
-/// Configuration loader implementation
-pub struct DefaultConfigLoader;
-
-impl ConfigLoader for DefaultConfigLoader {
-    fn load_global() -> Result<Option<Config>> {
-        let home_dir = std::env::var("HOME").map_err(|_| crate::FsError::ConfigError { 
-            message: "HOME environment variable not set".to_string() 
-        })?;
-        let global_config_path = std::path::PathBuf::from(home_dir).join(".odi").join("config");
-        
-        if global_config_path.exists() {
-            let content = std::fs::read_to_string(global_config_path)?;
-            let config: Config = toml::from_str(&content)?;
-            Ok(Some(config))
-        } else {
-            Ok(None)
-        }
-    }
-
-    fn load_local(workspace_path: &Path) -> Result<Option<Config>> {
-        let local_config_path = workspace_path.join(".odi").join("config");
-        
-        if local_config_path.exists() {
-            let content = std::fs::read_to_string(local_config_path)?;
-            let config: Config = toml::from_str(&content)?;
-            Ok(Some(config))
-        } else {
-            Ok(None)
-        }
-    }
-
-    fn merge(global: Option<Config>, local: Option<Config>) -> Config {
-        match (global, local) {
-            (None, None) => Config::default(),
-            (Some(global), None) => global,
-            (None, Some(local)) => local,
-            (Some(mut global), Some(local)) => {
-                // Local config overrides global
-                global.user = local.user;
-                if local.workspace.is_some() {
-                    global.workspace = local.workspace;
-                }
-                // Merge project configs
-                for (key, value) in local.project {
-                    global.project.insert(key, value);
-                }
-                // Merge remote configs
-                for (key, value) in local.remote {
-                    global.remote.insert(key, value);
-                }
-                // Local UI and sync settings override global
-                global.ui = local.ui;
-                global.sync = local.sync;
-                global
-            }
-        }
-    }
-
-    fn validate(config: &Config) -> Result<()> {
-        // Validate user config
-        if config.user.name.is_empty() {
-            return Err(crate::FsError::ConfigError {
-                message: "User name cannot be empty".to_string(),
-            });
-        }
-
-        if !config.user.email.contains('@') {
-            return Err(crate::FsError::ConfigError {
-                message: "Invalid email format".to_string(),
-            });
-        }
-
-        // Validate workspace references existing projects
-        if let Some(ref workspace) = config.workspace {
-            for project_id in &workspace.active_projects {
-                if !config.project.contains_key(project_id) {
-                    return Err(crate::FsError::ConfigError {
-                        message: format!("Workspace references undefined project: {}", project_id),
-                    });
-                }
-            }
-        }
-
-        // Validate UI color setting
-        if !["auto", "always", "never"].contains(&config.ui.color.as_str()) {
-            return Err(crate::FsError::ConfigError {
-                message: format!("Invalid UI color setting: {}", config.ui.color),
-            });
-        }
-
-        // Validate sync conflict strategy
-        if !["manual", "local", "remote"].contains(&config.sync.conflict_strategy.as_str()) {
-            return Err(crate::FsError::ConfigError {
-                message: format!("Invalid conflict strategy: {}", config.sync.conflict_strategy),
-            });
-        }
-
-        Ok(())
-    }
 }
 
 impl Default for Config {
     fn default() -> Self {
-        Self {
+        Config {
             user: UserConfig {
-                name: "Anonymous".to_string(),
-                email: "anonymous@example.com".to_string(),
-                ssh_key: None,
+                name: "Unknown User".to_string(),
+                email: "user@example.com".to_string(),
             },
-            workspace: None,
-            project: HashMap::new(),
-            remote: HashMap::new(),
-            ui: UiConfig {
-                color: "auto".to_string(),
-                pager: true,
-                editor: None,
+            project: ProjectConfig {
+                name: "default".to_string(),
+                description: None,
+                default_branch: Some("main".to_string()),
             },
-            sync: SyncConfig {
-                auto_pull: false,
-                conflict_strategy: "manual".to_string(),
-                compress_objects: true,
-            },
+            remotes: HashMap::new(),
         }
     }
+}
+
+pub trait ConfigLoader {
+    fn load_global() -> crate::Result<Option<Config>>;
+    fn load_local(workspace_path: &Path) -> crate::Result<Option<Config>>;
+    fn merge(global: Option<Config>, local: Option<Config>) -> Config;
+    fn validate(config: &Config) -> crate::Result<()>;
+}
+
+pub struct FileConfigLoader;
+
+impl ConfigLoader for FileConfigLoader {
+    fn load_global() -> crate::Result<Option<Config>> {
+        let home_dir = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+        let global_path = PathBuf::from(home_dir).join(".odi").join("config");
+        
+        if global_path.exists() {
+            let content = fs::read_to_string(&global_path)
+                .map_err(|e| crate::FsError::Io(e))?;
+            let config: Config = toml::from_str(&content)
+                .map_err(|e| crate::FsError::TomlError(e))?;
+            Self::validate(&config)?;
+            Ok(Some(config))
+        } else {
+            Ok(None)
+        }
+    }
+    
+    fn load_local(workspace_path: &Path) -> crate::Result<Option<Config>> {
+        let local_path = workspace_path.join(".odi").join("config");
+        
+        if local_path.exists() {
+            let content = fs::read_to_string(local_path)
+                .map_err(|e| crate::FsError::Io(e))?;
+            let config: Config = toml::from_str(&content)
+                .map_err(|e| crate::FsError::TomlError(e))?;
+            Self::validate(&config)?;
+            Ok(Some(config))
+        } else {
+            Ok(None)
+        }
+    }
+    
+    fn merge(global: Option<Config>, local: Option<Config>) -> Config {
+        match (global, local) {
+            (None, None) => Config::default(),
+            (Some(g), None) => g,
+            (None, Some(l)) => l,
+            (Some(mut g), Some(l)) => {
+                // Local config takes precedence
+                g.user = l.user;
+                g.project = l.project;
+                // Merge remotes (local takes precedence)
+                for (name, remote) in l.remotes {
+                    g.remotes.insert(name, remote);
+                }
+                g
+            }
+        }
+    }
+    
+    fn validate(config: &Config) -> crate::Result<()> {
+        if config.user.name.trim().is_empty() {
+            return Err(crate::FsError::ConfigError {
+                message: "User name cannot be empty".to_string(),
+            });
+        }
+        
+        if config.user.email.trim().is_empty() {
+            return Err(crate::FsError::ConfigError {
+                message: "User email cannot be empty".to_string(),
+            });
+        }
+        
+        if !config.user.email.contains('@') {
+            return Err(crate::FsError::ConfigError {
+                message: "User email must be valid".to_string(),
+            });
+        }
+        
+        if config.project.name.trim().is_empty() {
+            return Err(crate::FsError::ConfigError {
+                message: "Project name cannot be empty".to_string(),
+            });
+        }
+        
+        // Validate remotes
+        for (name, remote) in &config.remotes {
+            if name.trim().is_empty() {
+                return Err(crate::FsError::ConfigError {
+                    message: "Remote name cannot be empty".to_string(),
+                });
+            }
+            
+            if remote.url.trim().is_empty() {
+                return Err(crate::FsError::ConfigError {
+                    message: format!("Remote '{}' URL cannot be empty", name),
+                });
+            }
+            
+            if !["ssh", "https"].contains(&remote.protocol.as_str()) {
+                return Err(crate::FsError::ConfigError {
+                    message: format!("Remote '{}' protocol must be 'ssh' or 'https'", name),
+                });
+            }
+        }
+        
+        Ok(())
+    }
+}
+
+/// Load configuration with hierarchy: global < local
+pub fn load_config() -> crate::Result<Config> {
+    let global = FileConfigLoader::load_global()?;
+    let local = FileConfigLoader::load_local(Path::new("."))?;
+    Ok(FileConfigLoader::merge(global, local))
+}
+
+/// Save configuration to local .odi/config file
+pub fn save_config(config: &Config) -> crate::Result<()> {
+    FileConfigLoader::validate(config)?;
+    
+    // Ensure .odi directory exists
+    let odi_dir = Path::new(".odi");
+    if !odi_dir.exists() {
+        fs::create_dir_all(odi_dir).map_err(|e| crate::FsError::Io(e))?;
+    }
+    
+    let config_path = odi_dir.join("config");
+    let toml_string = toml::to_string_pretty(config).map_err(|e| {
+        crate::FsError::ConfigError {
+            message: format!("Failed to serialize config: {}", e),
+        }
+    })?;
+    
+    fs::write(config_path, toml_string).map_err(|e| crate::FsError::Io(e))?;
+    Ok(())
 }
