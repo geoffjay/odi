@@ -1,0 +1,41 @@
+[package]
+name = "odi-net"
+version = "0.1.0"
+edition = "2021"
+authors = ["ODI Contributors"]
+description = "Network operations for ODI distributed issue tracking"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/example/odi"
+keywords = ["network", "sync", "ssh", "https"]
+categories = ["network-programming", "development-tools"]
+
+[lib]
+name = "odi_net"
+path = "src/lib.rs"
+
+[dependencies]
+# Workspace dependencies
+odi-core = { path = "../odi-core" }
+serde = { workspace = true }
+tokio = { workspace = true }
+thiserror = { workspace = true }
+chrono = { workspace = true }
+
+# Networking
+reqwest = { workspace = true }
+url = "2.0"
+async-trait = "0.1"
+
+# SSH support (optional)
+async-ssh2-tokio = { version = "0.8", optional = true }
+
+# Authentication and security
+base64 = "0.21"
+
+[features]
+default = ["ssh-support"]
+ssh-support = ["async-ssh2-tokio"]
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio-test = "0.4"

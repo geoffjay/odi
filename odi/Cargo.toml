@@ -1,0 +1,38 @@
+[package]
+name = "odi"
+version = "0.1.0"
+edition = "2021"
+authors = ["ODI Contributors"]
+description = "Distributed issue tracking system inspired by Git"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/example/odi"
+keywords = ["cli", "issue-tracking", "distributed", "git"]
+categories = ["command-line-utilities", "development-tools"]
+
+[[bin]]
+name = "odi"
+path = "src/main.rs"
+
+[dependencies]
+# Workspace dependencies
+odi-core = { path = "../odi-core" }
+odi-fs = { path = "../odi-fs" }
+odi-net = { path = "../odi-net" }
+
+# External dependencies
+clap = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+serde_json = "1.0"
+
+# Terminal and output formatting
+console = "0.15"
+indicatif = "0.17"
+tabled = "0.14"
+
+[dev-dependencies]
+tempfile = { workspace = true }
+assert_cmd = "2.0"
+predicates = "3.0"

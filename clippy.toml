@@ -1,0 +1,46 @@
+# Clippy configuration for ODI workspace
+# Follows Rust best practices and constitutional code quality standards
+
+# Pedantic lints for high code quality
+avoid-breaking-exported-api = false
+msrv = "1.75"
+
+# Allowed lints (exceptions for practical development)
+allow = [
+    # Allow module inception for clear organization
+    "clippy::module_inception",
+    # Allow large enum variant names for clarity
+    "clippy::large_enum_variant",
+    # Allow multiple crate versions during development
+    "clippy::multiple_crate_versions",
+]
+
+# Denied lints (enforce best practices)
+deny = [
+    # Performance
+    "clippy::inefficient_to_string",
+    "clippy::unnecessary_wraps",
+    
+    # Correctness 
+    "clippy::mem_forget",
+    "clippy::unused_io_amount",
+    
+    # Style consistency
+    "clippy::needless_pass_by_value",
+    "clippy::redundant_closure",
+    
+    # Documentation
+    "missing_docs",
+    "clippy::missing_docs_in_private_items",
+]
+
+# Warn on complexity
+warn = [
+    "clippy::cognitive_complexity",
+    "clippy::too_many_arguments", 
+    "clippy::type_complexity",
+]
+
+# Complexity limits aligned with maintainability
+cognitive-complexity-threshold = 25
+type-complexity-threshold = 100
