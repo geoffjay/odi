@@ -1,0 +1,1 @@
+Pin<Box<(dyn Future<Output = std::result::Result<ObjectHash, FsError>> + Send + 'async_trait)>>

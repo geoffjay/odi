@@ -1,0 +1,15 @@
+/Users/geoff/Projects/odi/target/debug/deps/assert_cmd-927eddd16535e1bd.d: /Users/geoff/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/assert_cmd-2.0.17/src/lib.rs /Users/geoff/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/assert_cmd-2.0.17/src/macros.rs /Users/geoff/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/assert_cmd-2.0.17/src/assert.rs /Users/geoff/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/assert_cmd-2.0.17/src/cargo.rs /Users/geoff/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/assert_cmd-2.0.17/src/cmd.rs /Users/geoff/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/assert_cmd-2.0.17/src/output.rs /Users/geoff/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/assert_cmd-2.0.17/src/color.rs /Users/geoff/Projects/odi/target/debug/build/assert_cmd-791ff810f158f462/out/current_target.txt /Users/geoff/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/assert_cmd-2.0.17/src/../README.md
+
+/Users/geoff/Projects/odi/target/debug/deps/libassert_cmd-927eddd16535e1bd.rmeta: /Users/geoff/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/assert_cmd-2.0.17/src/lib.rs /Users/geoff/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/assert_cmd-2.0.17/src/macros.rs /Users/geoff/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/assert_cmd-2.0.17/src/assert.rs /Users/geoff/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/assert_cmd-2.0.17/src/cargo.rs /Users/geoff/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/assert_cmd-2.0.17/src/cmd.rs /Users/geoff/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/assert_cmd-2.0.17/src/output.rs /Users/geoff/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/assert_cmd-2.0.17/src/color.rs /Users/geoff/Projects/odi/target/debug/build/assert_cmd-791ff810f158f462/out/current_target.txt /Users/geoff/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/assert_cmd-2.0.17/src/../README.md
+
+/Users/geoff/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/assert_cmd-2.0.17/src/lib.rs:
+/Users/geoff/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/assert_cmd-2.0.17/src/macros.rs:
+/Users/geoff/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/assert_cmd-2.0.17/src/assert.rs:
+/Users/geoff/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/assert_cmd-2.0.17/src/cargo.rs:
+/Users/geoff/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/assert_cmd-2.0.17/src/cmd.rs:
+/Users/geoff/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/assert_cmd-2.0.17/src/output.rs:
+/Users/geoff/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/assert_cmd-2.0.17/src/color.rs:
+/Users/geoff/Projects/odi/target/debug/build/assert_cmd-791ff810f158f462/out/current_target.txt:
+/Users/geoff/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/assert_cmd-2.0.17/src/../README.md:
+
+# env-dep:OUT_DIR=/Users/geoff/Projects/odi/target/debug/build/assert_cmd-791ff810f158f462/out

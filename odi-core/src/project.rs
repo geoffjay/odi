@@ -66,6 +66,29 @@ impl Project {
             updated_at: now,
         }
     }
+
+    /// Validate project ID (3-100 characters, alphanumeric + ._-)
+    pub fn validate_id(id: &str) -> bool {
+        id.len() >= 3 && id.len() <= 100 && 
+        id.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-')
+    }
+
+    /// Validate project name (1-100 characters)
+    pub fn validate_name(name: &str) -> bool {
+        !name.is_empty() && name.len() <= 100
+    }
+
+    /// Add workspace reference
+    pub fn add_workspace(&mut self, workspace_id: WorkspaceId) {
+        if !self.workspaces.contains(&workspace_id) {
+            self.workspaces.push(workspace_id);
+        }
+    }
+
+    /// Remove workspace reference
+    pub fn remove_workspace(&mut self, workspace_id: &WorkspaceId) {
+        self.workspaces.retain(|id| id != workspace_id);
+    }
 }
 
 impl Workspace {
@@ -80,6 +103,18 @@ impl Workspace {
             updated_at: now,
         }
     }
+
+    /// Add project reference (many-to-many relationship)
+    pub fn add_project(&mut self, project_id: ProjectId) {
+        if !self.projects.contains(&project_id) {
+            self.projects.push(project_id);
+        }
+    }
+
+    /// Remove project reference
+    pub fn remove_project(&mut self, project_id: &ProjectId) {
+        self.projects.retain(|id| id != project_id);
+    }
 }
 
 impl Label {
@@ -92,5 +127,17 @@ impl Label {
             color,
             created_at: Utc::now(),
         }
+    }
+
+    /// Validate hex color format
+    pub fn validate_color(color: &str) -> bool {
+        color.len() == 7 && 
+        color.starts_with('#') && 
+        color[1..].chars().all(|c| c.is_ascii_hexdigit())
+    }
+
+    /// Validate label name (1-50 characters)
+    pub fn validate_name(name: &str) -> bool {
+        !name.is_empty() && name.len() <= 50
     }
 }

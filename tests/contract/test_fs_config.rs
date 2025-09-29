@@ -3,7 +3,8 @@
 //! Tests configuration loading, hierarchy, and TOML validation.
 //! This test MUST FAIL initially as per Constitutional Principle I (TDD).
 
-use odi_fs::{Config, ConfigLoader, ProjectConfig, RemoteConfig, UserConfig, WorkspaceConfig};
+use odi_fs::{Config, ConfigLoader};
+use odi_fs::config::{ProjectConfig, RemoteConfig, UserConfig, WorkspaceConfig};
 use std::collections::HashMap;
 use std::path::Path;
 use tempfile::TempDir;
@@ -279,9 +280,9 @@ fn test_toml_format_compliance() {
     // Test that generated TOML follows expected format
     let config = Config {
         user: UserConfig {
-            name = "John Developer".to_string(),
-            email = "john@example.com".to_string(),
-            ssh_key = Some(std::path::PathBuf::from("~/.ssh/id_rsa")),
+            name: "John Developer".to_string(),
+            email: "john@example.com".to_string(),
+            ssh_key: Some(std::path::PathBuf::from("~/.ssh/id_rsa")),
         },
         workspace: Some(WorkspaceConfig {
             active_projects: vec!["main".to_string(), "docs".to_string()],

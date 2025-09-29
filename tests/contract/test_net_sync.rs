@@ -4,7 +4,8 @@
 //! This test MUST FAIL initially as per Constitutional Principle I (TDD).
 
 use odi_core::{Issue, IssueId, Remote, User};
-use odi_net::{IssueMetadata, RemoteSync, RemoteSyncState, SyncClient};
+use odi_net::{RemoteSync};
+use odi_net::sync::{IssueMetadata, RemoteSyncState, SyncClient};
 use std::collections::HashMap;
 
 // Mock implementation for testing - will be replaced by real implementation

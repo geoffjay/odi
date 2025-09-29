@@ -34,3 +34,29 @@ pub trait Authentication {
     fn store_credential(&self, remote: &Remote, credential: &Credential) -> Result<()>;
     fn remove_credential(&self, remote: &Remote) -> Result<()>;
 }
+
+impl AuthToken {
+    pub fn new(token: String) -> Self {
+        Self {
+            token,
+            expires_at: None,
+            refresh_token: None,
+        }
+    }
+
+    pub fn with_expiry(token: String, expires_at: DateTime<Utc>) -> Self {
+        Self {
+            token,
+            expires_at: Some(expires_at),
+            refresh_token: None,
+        }
+    }
+
+    pub fn is_expired(&self) -> bool {
+        if let Some(expires_at) = self.expires_at {
+            Utc::now() > expires_at
+        } else {
+            false
+        }
+    }
+}

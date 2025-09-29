@@ -34,6 +34,7 @@ git2 = { version = "0.18", optional = true }
 
 # File watching and locking
 fs4 = "0.7"
+uuid = { workspace = true }
 
 [features]
 default = ["git-integration"]

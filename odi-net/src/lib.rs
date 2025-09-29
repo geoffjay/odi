@@ -12,7 +12,7 @@ pub mod sync;
 pub use auth::{AuthToken, Authentication, Credential};
 pub use error::{NetError, Result};
 pub use protocols::{Protocol, ProtocolHandler};
-pub use sync::{RemoteSync, SyncClient};
+pub use sync::{RemoteSync};
 
 /// Current version of the ODI network library
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
