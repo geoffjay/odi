@@ -30,7 +30,7 @@ impl IssueArgs {
             IssueSubcommand::Create { title, description } => {
                 let mut issue = Issue::new(
                     title.clone(),
-                    "current-user".to_string(), // TODO: Get from context
+                    std::env::var("USER").unwrap_or_else(|_| "unknown".to_string()), // Get from environment
                 );
                 
                 // Set description if provided

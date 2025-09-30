@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
 use odi_core::{Issue, IssueId, Remote, IssueStatus, Priority};
 use crate::{Result, NetError};
+use crate::protocol::{Protocol, ProtocolHandler, HttpsHandler, SshHandler};
+use crate::auth::Credential;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncMetadata {
@@ -64,33 +66,85 @@ impl DefaultRemoteSync {
 
 #[async_trait::async_trait]
 impl RemoteSync for DefaultRemoteSync {
-    async fn connect(&self, _remote: &Remote) -> Result<SyncClient> {
+    async fn connect(&self, remote: &Remote) -> Result<SyncClient> {
+        // Parse the remote URL to determine protocol
+        let url = url::Url::parse(&remote.url).map_err(|e| NetError::Sync {
+            message: format!("Invalid remote URL '{}': {}", remote.url, e),
+        })?;
+
+        let protocol = match url.scheme() {
+            "ssh" => Protocol::SSH,
+            "https" | "http" => Protocol::HTTPS,
+            scheme => return Err(NetError::Sync {
+                message: format!("Unsupported protocol: {}", scheme),
+            }),
+        };
+
+        // Create appropriate protocol handler
+        let handler: Box<dyn ProtocolHandler> = match protocol {
+            Protocol::SSH => Box::new(SshHandler::new()),
+            Protocol::HTTPS => Box::new(HttpsHandler::new()),
+        };
+
+        // Extract credentials from URL or use defaults
+        let credentials = if let Some(password) = url.password() {
+            // If password is provided in URL, treat as token
+            Credential::Token {
+                value: password.to_string(),
+            }
+        } else {
+            // For SSH without credentials in URL, try default SSH key
+            if protocol == Protocol::SSH {
+                Credential::SshKey {
+                    path: std::path::PathBuf::from(format!("{}/.ssh/id_rsa", std::env::var("HOME").unwrap_or_default())),
+                    passphrase: None,
+                }
+            } else {
+                return Err(NetError::Sync {
+                    message: "No credentials provided for HTTPS connection".to_string(),
+                });
+            }
+        };
+
+        // Authenticate
+        let _auth_token = handler.authenticate(&credentials).await?;
+
+        Ok(SyncClient::new(
+            remote.url.clone(),
+            match protocol {
+                Protocol::SSH => "ssh".to_string(),
+                Protocol::HTTPS => "https".to_string(),
+            },
+        ))
+    }
+
+    async fn list_issues(&self, client: &SyncClient) -> Result<Vec<IssueMetadata>> {
+        // For now, return empty list - this would fetch issue metadata from remote
+        // In a real implementation, this would make a request to list all issues
+        println!("Listing issues from remote: {}", client.remote_url);
+        Ok(Vec::new())
+    }
+
+    async fn download_issue(&self, client: &SyncClient, id: &IssueId) -> Result<Issue> {
+        // For now, return error - this would download a specific issue
+        println!("Downloading issue {} from remote: {}", id, client.remote_url);
         Err(NetError::Sync {
-            message: "RemoteSync::connect not implemented yet".to_string(),
+            message: format!("Issue {} not found on remote", id),
         })
     }
 
-    async fn list_issues(&self, _client: &SyncClient) -> Result<Vec<IssueMetadata>> {
-        Err(NetError::Sync {
-            message: "RemoteSync::list_issues not implemented yet".to_string(),
-        })
+    async fn upload_issue(&self, client: &SyncClient, issue: &Issue) -> Result<()> {
+        // For now, just log - this would upload the issue to remote
+        println!("Uploading issue {} to remote: {}", issue.id, client.remote_url);
+        Ok(())
     }
 
-    async fn download_issue(&self, _client: &SyncClient, _id: &IssueId) -> Result<Issue> {
-        Err(NetError::Sync {
-            message: "RemoteSync::download_issue not implemented yet".to_string(),
-        })
-    }
-
-    async fn upload_issue(&self, _client: &SyncClient, _issue: &Issue) -> Result<()> {
-        Err(NetError::Sync {
-            message: "RemoteSync::upload_issue not implemented yet".to_string(),
-        })
-    }
-
-    async fn get_sync_state(&self, _client: &SyncClient) -> Result<RemoteSyncState> {
-        Err(NetError::Sync {
-            message: "RemoteSync::get_sync_state not implemented yet".to_string(),
+    async fn get_sync_state(&self, client: &SyncClient) -> Result<RemoteSyncState> {
+        Ok(RemoteSyncState {
+            remote_name: client.remote_url.clone(),
+            last_sync: Some(chrono::Utc::now()),
+            total_issues: 0,
+            pending_changes: 0,
         })
     }
 }

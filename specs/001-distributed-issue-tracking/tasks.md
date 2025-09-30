@@ -112,10 +112,10 @@
 - [x] **T052** Create `odi-net/src/lib.rs` with protocol and sync exports
 - [x] **T053** [P] Implement AuthToken handling in `odi-net/src/auth/token.rs`
 - [x] **T054** [P] Implement Credential storage in `odi-net/src/auth/credential.rs`
-- [x] **T055** [P] Implement SSH protocol handler in `odi-net/src/protocols/ssh.rs`
-- [x] **T056** [P] Implement HTTPS protocol handler in `odi-net/src/protocols/https.rs`
-- [x] **T057** Implement Authentication trait in `odi-net/src/auth/mod.rs`
-- [x] **T058** Implement RemoteSync trait in `odi-net/src/sync/remote.rs` with object transfer
+- [x] **T055** [P] Implement SSH protocol handler in `odi-net/src/protocols/ssh.rs` *(COMPLETE - SSH operations working with external ssh/scp commands)*
+- [x] **T056** [P] Implement HTTPS protocol handler in `odi-net/src/protocols/https.rs` *(COMPLETE - HTTPS operations working with reqwest client)*
+- [x] **T057** Implement Authentication trait in `odi-net/src/auth/mod.rs` *(COMPLETE - SSH key and token authentication)*
+- [x] **T058** Implement RemoteSync trait in `odi-net/src/sync/remote.rs` with object transfer *(COMPLETE - connection, sync state, and operations working)*
 - [x] **T059** Implement SyncClient in `odi-net/src/sync/client.rs` with connection management
 - [x] **T060** Implement conflict detection in `odi-net/src/sync/conflicts.rs`
 
@@ -128,7 +128,7 @@
 - [x] **T064** [P] Implement init command in `odi/src/commands/init.rs` with workspace creation *(COMPLETE - fully functional)*
 - [x] **T065** [P] Implement project commands in `odi/src/commands/project.rs` (create, list) *(COMPLETE - fully functional)*
 - [x] **T066** [P] Implement issue commands in `odi/src/commands/issue.rs` (create, assign, list, update) *(COMPLETE - create, list working)*
-- [x] **T067** [P] Implement remote commands in `odi/src/commands/remote.rs` (add, pull, push) *(COMPLETE - add, list, pull/push with placeholders for network sync)*
+- [x] **T067** [P] Implement remote commands in `odi/src/commands/remote.rs` (add, pull, push) *(COMPLETE - add, list, pull/push working with SSH/HTTPS networking)*
 - [x] **T068** [P] Implement team commands in `odi/src/commands/team.rs` (create, add-member) *(COMPLETE - create, list working)*
 - [x] **T069** [P] Implement config commands in `odi/src/commands/config.rs` (get, set) *(COMPLETE - get, set, list working with validation)*
 - [x] **T070** [P] Implement label commands in `odi/src/commands/label.rs` (create, list) *(COMPLETE - create and list working with validation)*

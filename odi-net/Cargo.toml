@@ -30,13 +30,15 @@ uuid = { version = "1.0", features = ["v4", "serde"] }
 
 # SSH support (optional)
 async-ssh2-tokio = { version = "0.8", optional = true }
+ssh2 = { version = "0.9", optional = true }
 
 # Authentication and security
 base64 = "0.21"
+tempfile = "3.0"
 
 [features]
 default = ["ssh-support"]
-ssh-support = ["async-ssh2-tokio"]
+ssh-support = ["async-ssh2-tokio", "ssh2"]
 
 [dev-dependencies]
 tempfile = { workspace = true }
