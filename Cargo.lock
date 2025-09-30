@@ -1714,6 +1714,7 @@ dependencies = [
  "anyhow",
  "assert_cmd",
  "async-trait",
+ "bincode",
  "chrono",
  "clap",
  "console",

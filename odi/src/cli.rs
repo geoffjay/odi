@@ -6,10 +6,20 @@ use crate::commands::*;
 use crate::{Result, AppContext};
 
 /// ODI - Distributed Issue Tracking
+/// 
+/// A Git-like distributed issue tracking system for offline-first project management.
+/// 
+/// EXAMPLES:
+///     odi init                    # Initialize workspace in current directory
+///     odi issue create "Bug fix"  # Create a new issue
+///     odi remote add origin ssh://git@server/repo.odi
+///     odi remote push origin      # Push issues to remote
+///     odi remote pull origin      # Pull issues from remote
 #[derive(Parser)]
 #[command(name = "odi")]
 #[command(about = "A Git-like distributed issue tracking system")]
 #[command(version = env!("CARGO_PKG_VERSION"))]
+#[command(long_about = "ODI provides distributed, offline-first issue tracking similar to Git.\nUse 'odi <command> --help' for detailed command information.")]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
@@ -18,21 +28,36 @@ pub struct Cli {
 /// Available commands
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Initialize ODI workspace
+    /// Initialize ODI workspace in current directory
+    #[command(about = "Initialize ODI workspace\n\nCreates .odi directory with configuration and storage.\nDetects Git repository and associates issues with it.")]
     Init(InitArgs),
+    
     /// Project management commands
+    #[command(about = "Project management commands\n\nManage projects that group related issues together.")]
     Project(ProjectArgs),
+    
     /// Issue management commands  
+    #[command(about = "Issue management commands\n\nCreate, list, and manage issues in your workspace.")]
     Issue(IssueArgs),
+    
     /// Remote repository commands
+    #[command(about = "Remote repository commands\n\nSynchronize issues with remote repositories via SSH/HTTPS.")]
     Remote(RemoteArgs),
+    
     /// Team management commands
+    #[command(about = "Team management commands\n\nManage users and teams for collaborative workflows.")]
     Team(TeamArgs),
+    
     /// Configuration commands
+    #[command(about = "Configuration management\n\nView and modify ODI settings in ~/.odiconfig and .odi/config")]
     Config(ConfigArgs),
+    
     /// Label management commands
+    #[command(about = "Label management commands\n\nCreate and manage labels to categorize issues.")]
     Label(LabelArgs),
+    
     /// Filesystem check and repair
+    #[command(about = "Check and repair ODI data integrity\n\nValidate object store and fix corruption issues.")]
     Fsck(FsckArgs),
 }
 
