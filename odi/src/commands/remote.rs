@@ -2,7 +2,7 @@
 
 use clap::{Args, Subcommand};
 use crate::{Result, AppContext};
-use odi_core::{Remote, RemoteRepository};
+use odi_core::{Remote, RemoteRepository, IssueRepository};
 use odi_net::{RemoteSync, DefaultRemoteSync};
 
 #[derive(Args)]
@@ -206,11 +206,79 @@ async fn pull_remote(ctx: &AppContext, remote_name: Option<&str>, _force: bool, 
 
                     // List issues from remote for syncing
                     match sync.list_issues(&client).await {
-                        Ok(issues) => {
-                            if issues.is_empty() {
-                                println!("✓ No issues to sync from remote");
+                        Ok(remote_issues) => {
+                            println!("✓ Found {} issues on remote", remote_issues.len());
+                            
+                            if remote_issues.is_empty() {
+                                println!("ℹ️  No issues to pull from remote");
+                                return Ok(());
+                            }
+                            
+                            // Get local issues for comparison
+                            let issue_repo = ctx.issue_repository();
+                            let local_issues = issue_repo.list(odi_core::issue::IssueQuery::default()).await
+                                .map_err(|e| crate::OdiError::Storage { 
+                                    message: format!("Failed to get local issues: {}", e) 
+                                })?;
+                            
+                            let mut downloaded_count = 0;
+                            let mut updated_count = 0;
+                            
+                            for remote_issue in remote_issues {
+                                // Check if issue exists locally
+                                if let Some(local_issue) = local_issues.iter().find(|i| i.id == remote_issue.id) {
+                                    // Compare timestamps to see if remote is newer
+                                    if remote_issue.last_modified > local_issue.updated_at {
+                                        // Download and update the issue
+                                        match sync.download_issue(&client, &remote_issue.id).await {
+                                            Ok(issue) => {
+                                                let update = odi_core::issue::IssueUpdate {
+                                                    title: Some(issue.title.clone()),
+                                                    description: Some(issue.description.clone()),
+                                                    status: Some(issue.status.clone()),
+                                                    priority: Some(issue.priority.clone()),
+                                                    assignees: Some(issue.assignees.clone()),
+                                                    co_authors: Some(issue.co_authors.clone()),
+                                                    labels: Some(issue.labels.clone()),
+                                                    project_id: Some(issue.project_id.clone()),
+                                                };
+                                                
+                                                issue_repo.update(&issue.id, update).await
+                                                    .map_err(|e| crate::OdiError::Storage { 
+                                                        message: format!("Failed to update issue: {}", e) 
+                                                    })?;
+                                                
+                                                updated_count += 1;
+                                                println!("  ↻ Updated issue: {}", issue.title);
+                                            },
+                                            Err(e) => {
+                                                println!("  ⚠️  Failed to download issue {}: {}", remote_issue.id, e);
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    // Issue doesn't exist locally, download it
+                                    match sync.download_issue(&client, &remote_issue.id).await {
+                                        Ok(issue) => {
+                                            issue_repo.create(issue.clone()).await
+                                                .map_err(|e| crate::OdiError::Storage { 
+                                                    message: format!("Failed to create issue: {}", e) 
+                                                })?;
+                                            
+                                            downloaded_count += 1;
+                                            println!("  ↓ Downloaded new issue: {}", issue.title);
+                                        },
+                                        Err(e) => {
+                                            println!("  ⚠️  Failed to download issue {}: {}", remote_issue.id, e);
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            if downloaded_count > 0 || updated_count > 0 {
+                                println!("✓ Pull completed: {} new, {} updated", downloaded_count, updated_count);
                             } else {
-                                println!("✓ Found {} issues on remote to sync", issues.len());
+                                println!("✓ Pull completed: No changes");
                             }
                             return Ok(());
                         },
@@ -270,25 +338,66 @@ async fn push_remote(ctx: &AppContext, remote_name: Option<&str>, _force: bool, 
         Ok(client) => {
             println!("✓ Connected successfully to remote: {}", remote.url);
             
-            // Get sync state from remote
-            match sync.get_sync_state(&client).await {
-                Ok(state) => {
-                    println!("✓ Remote sync state retrieved:");
-                    println!("  Total issues: {}", state.total_issues);
-                    println!("  Pending changes: {}", state.pending_changes);
-                    
-                    // For now, we'll just demonstrate successful connection
-                    // In a real implementation, this would:
-                    // 1. Compare local state with remote state
-                    // 2. Upload changed issues
-                    // 3. Handle conflicts
-                    println!("✓ Push completed successfully (demonstration mode)");
-                    return Ok(());
-                },
-                Err(e) => {
-                    println!("⚠️  Could not get sync state: {}", e);
+            // Get local issues to push
+            let issue_repo = ctx.issue_repository();
+            let local_issues = issue_repo.list(odi_core::issue::IssueQuery::default()).await
+                .map_err(|e| crate::OdiError::Storage { 
+                    message: format!("Failed to get local issues: {}", e) 
+                })?;
+            
+            if local_issues.is_empty() {
+                println!("ℹ️  No local issues to push");
+                return Ok(());
+            }
+            
+            println!("📤 Pushing {} local issues to remote", local_issues.len());
+            
+            // Get remote issues for comparison
+            let remote_issues = sync.list_issues(&client).await.map_err(|e| crate::OdiError::Command { 
+                message: format!("Failed to list remote issues: {}", e)
+            })?;
+            
+            let mut uploaded_count = 0;
+            let mut skipped_count = 0;
+            
+            for local_issue in local_issues {
+                // Check if issue exists on remote
+                if let Some(remote_issue) = remote_issues.iter().find(|r| r.id == local_issue.id) {
+                    // Compare timestamps to see if local is newer
+                    if local_issue.updated_at > remote_issue.last_modified {
+                        // Upload the updated issue
+                        match sync.upload_issue(&client, &local_issue).await {
+                            Ok(_) => {
+                                uploaded_count += 1;
+                                println!("  ↑ Uploaded updated issue: {}", local_issue.title);
+                            },
+                            Err(e) => {
+                                println!("  ⚠️  Failed to upload issue {}: {}", local_issue.id, e);
+                            }
+                        }
+                    } else {
+                        skipped_count += 1;
+                    }
+                } else {
+                    // Issue doesn't exist on remote, upload it
+                    match sync.upload_issue(&client, &local_issue).await {
+                        Ok(_) => {
+                            uploaded_count += 1;
+                            println!("  ↑ Uploaded new issue: {}", local_issue.title);
+                        },
+                        Err(e) => {
+                            println!("  ⚠️  Failed to upload issue {}: {}", local_issue.id, e);
+                        }
+                    }
                 }
             }
+            
+            if uploaded_count > 0 {
+                println!("✓ Push completed: {} uploaded, {} skipped", uploaded_count, skipped_count);
+            } else {
+                println!("✓ Push completed: No changes to push");
+            }
+            return Ok(());
         },
         Err(e) => {
             println!("✗ Connection failed: {}", e);
@@ -297,6 +406,4 @@ async fn push_remote(ctx: &AppContext, remote_name: Option<&str>, _force: bool, 
             });
         }
     }
-    
-    Ok(())
 }
