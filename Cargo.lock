@@ -516,11 +516,13 @@ dependencies = [
 name = "contract_tests"
 version = "0.1.0"
 dependencies = [
+ "assert_cmd",
  "async-trait",
  "chrono",
  "odi-core",
  "odi-fs",
  "odi-net",
+ "predicates",
  "serde",
  "serde_json",
  "tempfile",

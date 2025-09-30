@@ -1,0 +1,129 @@
+services:
+  # SSH server for testing SSH protocol operations
+  odi-ssh-server:
+    image: alpine:latest
+    container_name: odi-ssh-server
+    ports:
+      - "2222:22"
+    volumes:
+      - ./.docker/ssh-repos:/repos
+      - ./.docker/ssh-keys:/keys
+    environment:
+      - SSH_ENABLE_PASSWORD_AUTH=yes
+      - SSH_USERS=odiuser:1000:1000
+    command: |
+      sh -c '
+        apk add --no-cache openssh-server openssh-keygen &&
+        ssh-keygen -A &&
+        mkdir -p /repos /keys &&
+        adduser -D -s /bin/sh -u 1000 -G wheel odiuser &&
+        echo "odiuser:odipass" | chpasswd &&
+        sed -i "s/#PasswordAuthentication.*/PasswordAuthentication yes/" /etc/ssh/sshd_config &&
+        sed -i "s/#PubkeyAuthentication.*/PubkeyAuthentication yes/" /etc/ssh/sshd_config &&
+        sed -i "s/#PermitRootLogin.*/PermitRootLogin no/" /etc/ssh/sshd_config &&
+        mkdir -p /home/odiuser/.ssh &&
+        chmod 700 /home/odiuser/.ssh &&
+        chown -R odiuser:odiuser /home/odiuser/.ssh &&
+        chown -R odiuser:odiuser /repos &&
+        /usr/sbin/sshd -D -e
+      '
+    networks:
+      - odi-test
+
+  # HTTPS server for testing HTTPS protocol operations
+  odi-https-server:
+    image: alpine:latest
+    container_name: odi-https-server
+    ports:
+      - "8443:443"
+      - "8080:80"
+    volumes:
+      - ./.docker/https-repos:/var/www/repos
+      - ./.docker/ssl-certs:/etc/ssl/certs/odi
+    environment:
+      - APACHE_RUN_USER=www-data
+      - APACHE_RUN_GROUP=www-data
+      - APACHE_LOG_DIR=/var/log/apache2
+    command: |
+      sh -c '
+        apk add --no-cache apache2 apache2-ssl openssl git &&
+        mkdir -p /var/www/repos /etc/ssl/certs/odi /var/log/apache2 &&
+        
+        # Generate self-signed certificate for testing
+        openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+          -keyout /etc/ssl/certs/odi/server.key \
+          -out /etc/ssl/certs/odi/server.crt \
+          -subj "/C=US/ST=Test/L=Test/O=ODI/CN=localhost" &&
+        
+        # Configure Apache for both HTTP and HTTPS
+        echo "<Directory \"/var/www/repos\">" > /etc/apache2/conf.d/odi.conf &&
+        echo "    Options Indexes FollowSymLinks" >> /etc/apache2/conf.d/odi.conf &&
+        echo "    AllowOverride None" >> /etc/apache2/conf.d/odi.conf &&
+        echo "    Require all granted" >> /etc/apache2/conf.d/odi.conf &&
+        echo "</Directory>" >> /etc/apache2/conf.d/odi.conf &&
+        echo "" >> /etc/apache2/conf.d/odi.conf &&
+        echo "<VirtualHost *:80>" >> /etc/apache2/conf.d/odi.conf &&
+        echo "    ServerName localhost" >> /etc/apache2/conf.d/odi.conf &&
+        echo "    DocumentRoot /var/www/repos" >> /etc/apache2/conf.d/odi.conf &&
+        echo "    <Location />" >> /etc/apache2/conf.d/odi.conf &&
+        echo "        Options +Indexes" >> /etc/apache2/conf.d/odi.conf &&
+        echo "        DirectoryIndex disabled" >> /etc/apache2/conf.d/odi.conf &&
+        echo "    </Location>" >> /etc/apache2/conf.d/odi.conf &&
+        echo "</VirtualHost>" >> /etc/apache2/conf.d/odi.conf &&
+        echo "" >> /etc/apache2/conf.d/odi.conf &&
+        echo "<VirtualHost *:443>" >> /etc/apache2/conf.d/odi.conf &&
+        echo "    ServerName localhost" >> /etc/apache2/conf.d/odi.conf &&
+        echo "    DocumentRoot /var/www/repos" >> /etc/apache2/conf.d/odi.conf &&
+        echo "    SSLEngine on" >> /etc/apache2/conf.d/odi.conf &&
+        echo "    SSLCertificateFile /etc/ssl/certs/odi/server.crt" >> /etc/apache2/conf.d/odi.conf &&
+        echo "    SSLCertificateKeyFile /etc/ssl/certs/odi/server.key" >> /etc/apache2/conf.d/odi.conf &&
+        echo "    <Location />" >> /etc/apache2/conf.d/odi.conf &&
+        echo "        Options +Indexes" >> /etc/apache2/conf.d/odi.conf &&
+        echo "        DirectoryIndex disabled" >> /etc/apache2/conf.d/odi.conf &&
+        echo "    </Location>" >> /etc/apache2/conf.d/odi.conf &&
+        echo "</VirtualHost>" >> /etc/apache2/conf.d/odi.conf &&
+        
+        # Load SSL module
+        echo "LoadModule ssl_module modules/mod_ssl.so" >> /etc/apache2/httpd.conf &&
+        
+        # Create some test repositories
+        mkdir -p /var/www/repos/test-repo.odi &&
+        echo "Test ODI repository for HTTPS testing" > /var/www/repos/test-repo.odi/README.txt &&
+        
+        # Set permissions
+        chown -R apache:apache /var/www/repos &&
+        chmod -R 755 /var/www/repos &&
+        
+        # Start Apache
+        httpd -D FOREGROUND
+      '
+    networks:
+      - odi-test
+
+  # Git server for reference/comparison (optional)
+  git-server:
+    image: alpine:latest
+    container_name: odi-git-server
+    ports:
+      - "9418:9418"
+    volumes:
+      - ./.docker/git-repos:/git-repos
+    command: |
+      sh -c '
+        apk add --no-cache git &&
+        mkdir -p /git-repos &&
+        cd /git-repos &&
+        git init --bare test-repo.git &&
+        git daemon --verbose --export-all --base-path=/git-repos --reuseaddr
+      '
+    networks:
+      - odi-test
+
+networks:
+  odi-test:
+    driver: bridge
+
+volumes:
+  ssh-repos:
+  https-repos:
+  git-repos:

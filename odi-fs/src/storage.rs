@@ -16,6 +16,7 @@ pub enum ObjectType {
     Team,
     Project,
     Label,
+    Remote,
 }
 
 /// Storage object with metadata
@@ -108,6 +109,7 @@ pub trait StorageEngine {
     async fn unlock(&self, lock: Lock) -> Result<()>;
 }
 
+#[derive(Clone)]
 pub struct FileSystemStorage {
     root_path: PathBuf,
     objects_path: PathBuf,

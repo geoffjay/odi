@@ -3,8 +3,8 @@
 //! Tests the StorageEngine trait contract for Git-like object store operations.
 //! This test MUST FAIL initially as per Constitutional Principle I (TDD).
 
-use odi_core::{Issue, User};
-use odi_fs::{ObjectHash, ObjectType, StorageEngine};
+use odi_core::{Issue, User, UserId};
+use odi_fs::{ObjectHash, ObjectType, StorageEngine, StorageLock};
 use std::path::Path;
 use tempfile::TempDir;
 
@@ -56,11 +56,11 @@ impl StorageEngine for MockStorageEngine {
         panic!("StorageEngine::list_refs not implemented yet")
     }
 
-    async fn lock(&self, _resource: &str) -> odi_fs::Result<odi_fs::storage::Lock> {
+    async fn lock(&self, _resource: &str) -> odi_fs::Result<StorageLock> {
         panic!("StorageEngine::lock not implemented yet")
     }
 
-    async fn unlock(&self, _lock: odi_fs::storage::Lock) -> odi_fs::Result<()> {
+    async fn unlock(&self, _lock: StorageLock) -> odi_fs::Result<()> {
         panic!("StorageEngine::unlock not implemented yet")
     }
 }
@@ -89,7 +89,7 @@ async fn test_object_storage_operations() {
         "Test User".to_string(),
         "test@example.com".to_string(),
     );
-    let issue = Issue::new("Test issue".to_string(), "test_user".to_string());
+    let issue = Issue::new("Test issue".to_string(), UserId::from("test_user"));
     
     // Write objects to storage
     let user_hash = storage.write_object(&user).await.expect("Should write user object");
@@ -145,7 +145,7 @@ async fn test_object_type_filtering() {
     
     // Create objects of different types
     let user = User::new("user".to_string(), "User".to_string(), "user@example.com".to_string());
-    let issue = Issue::new("Issue".to_string(), "user".to_string());
+    let issue = Issue::new("Issue".to_string(), UserId::from("user"));
     
     storage.write_object(&user).await.expect("Should write user");
     storage.write_object(&issue).await.expect("Should write issue");
@@ -239,7 +239,7 @@ async fn test_storage_error_handling() {
     let storage = MockStorageEngine::new();
     
     // Try to read non-existent object
-    let fake_hash = ObjectHash("nonexistent".to_string());
+    let fake_hash = ObjectHash::new("nonexistent".to_string());
     let result: odi_fs::Result<Option<User>> = storage.read_object(&fake_hash).await;
     
     // Should handle gracefully (return None, not error)

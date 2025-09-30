@@ -32,6 +32,9 @@ pub enum OdiError {
     #[error("Command error: {message}")]
     Command { message: String },
 
+    #[error("Validation error: {message}")]
+    Validation { message: String },
+
     #[error("IO error: {message}")]
     Io { message: String },
 }
@@ -73,6 +76,9 @@ impl OdiError {
             },
             OdiError::Command { message } => {
                 format!("⚠️  Command Error\n{}\n\n💡 Tip: Use 'odi --help' for command usage", message)
+            },
+            OdiError::Validation { message } => {
+                format!("❌ Validation Error\n{}\n\n💡 Tip: Check your input and try again", message)
             },
             OdiError::Io { message } => {
                 format!("📁 File System Error\n{}\n\n💡 Tip: Check file permissions and paths", message)

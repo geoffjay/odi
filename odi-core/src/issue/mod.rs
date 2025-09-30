@@ -1,4 +1,6 @@
-//! Issue entity and related types
+//! Issue entity and related operations
+
+mod repository;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -6,6 +8,8 @@ use uuid::Uuid;
 
 use crate::user::UserId;
 use crate::project::{ProjectId, LabelId};
+
+pub use repository::{IssueRepository, IssueQuery, IssueUpdate};
 
 /// Issue identifier type
 pub type IssueId = Uuid;

@@ -3,9 +3,8 @@
 //! Tests the core Issue entity serialization, validation, and state transitions.
 //! This test MUST FAIL initially as per Constitutional Principle I (TDD).
 
-use odi_core::{Issue, IssueId, IssueStatus, Priority, User, UserId};
+use odi_core::{Issue, IssueId, IssueStatus, Priority, UserId};
 use serde_json;
-use uuid::Uuid;
 
 #[test]
 fn test_issue_creation() {

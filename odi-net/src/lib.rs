@@ -12,7 +12,7 @@ pub mod sync;
 // Re-export important types
 pub use auth::{AuthToken, Credential};
 pub use protocol::{Protocol, ProtocolHandler};
-pub use sync::{RemoteSync, RemoteSyncState, SyncMetadata, IssueMetadata, SyncClient};
+pub use sync::{RemoteSync, RemoteSyncState, SyncMetadata, IssueMetadata, SyncClient, DefaultRemoteSync};
 
 #[derive(Error, Debug)]
 pub enum NetError {

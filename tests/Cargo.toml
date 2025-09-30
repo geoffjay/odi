@@ -19,6 +19,10 @@ async-trait = { workspace = true }
 toml = { workspace = true }
 serde_json = { workspace = true }
 
+# Test-specific dependencies
+assert_cmd = "2.0"
+predicates = "3.0"
+
 [[test]]
 name = "contract_tests"
 path = "contract/mod.rs"

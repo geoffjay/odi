@@ -8,9 +8,11 @@ use clap::Parser;
 mod cli;
 mod commands;
 mod error;
+mod integration;
 
 use cli::Cli;
 use error::OdiError;
+use integration::AppContext;
 
 type Result<T> = std::result::Result<T, OdiError>;
 

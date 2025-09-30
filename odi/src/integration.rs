@@ -8,11 +8,11 @@
 //! - T077: Implement configuration loading and validation
 
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
-use odi_fs::{FileSystemStorage, FileConfigLoader, Config, ConfigLoader};
+use odi_fs::{FileSystemStorage, FileConfigLoader, Config, ConfigLoader, FsIssueRepository, FsProjectRepository, FsUserRepository, FsRemoteRepository};
 use odi_net::sync::DefaultRemoteSync;
 use crate::{Result, OdiError};
+use std::sync::Arc;
 
 /// Application context providing dependency injection
 /// 
@@ -28,6 +28,14 @@ pub struct AppContext {
     config: Config,
     /// Remote sync service
     remote_sync: Arc<DefaultRemoteSync>,
+    /// Issue repository
+    issue_repository: Arc<FsIssueRepository>,
+    /// Project repository
+    project_repository: Arc<FsProjectRepository>,
+    /// User repository  
+    user_repository: Arc<FsUserRepository>,
+    /// Remote repository
+    remote_repository: Arc<FsRemoteRepository>,
 }
 
 impl AppContext {
@@ -56,11 +64,21 @@ impl AppContext {
         // T074: Integrate odi-core with odi-net for remote synchronization
         let remote_sync = Arc::new(DefaultRemoteSync::new());
         
+        // T075: Initialize repository implementations
+        let issue_repository = Arc::new(FsIssueRepository::new((*storage).clone()));
+        let project_repository = Arc::new(FsProjectRepository::new((*storage).clone()));
+        let user_repository = Arc::new(FsUserRepository::new((*storage).clone()));
+        let remote_repository = Arc::new(FsRemoteRepository::new((*storage).clone()));
+        
         Ok(Self {
             workspace_path,
             storage,
             config,
             remote_sync,
+            issue_repository,
+            project_repository,
+            user_repository,
+            remote_repository,
         })
     }
     
@@ -108,6 +126,26 @@ impl AppContext {
     /// Get remote sync service reference
     pub fn remote_sync(&self) -> &Arc<DefaultRemoteSync> {
         &self.remote_sync
+    }
+    
+    /// Get issue repository reference
+    pub fn issue_repository(&self) -> &Arc<FsIssueRepository> {
+        &self.issue_repository
+    }
+    
+    /// Get project repository reference
+    pub fn project_repository(&self) -> &Arc<FsProjectRepository> {
+        &self.project_repository
+    }
+    
+    /// Get user repository reference
+    pub fn user_repository(&self) -> &Arc<FsUserRepository> {
+        &self.user_repository
+    }
+    
+    /// Get remote repository reference
+    pub fn remote_repository(&self) -> &Arc<FsRemoteRepository> {
+        &self.remote_repository
     }
     
     /// Check if current directory is an ODI workspace
@@ -162,11 +200,21 @@ impl AppContext {
         
         let remote_sync = Arc::new(DefaultRemoteSync::new());
         
+        // Initialize repository implementations
+        let issue_repository = Arc::new(FsIssueRepository::new((*storage).clone()));
+        let project_repository = Arc::new(FsProjectRepository::new((*storage).clone()));
+        let user_repository = Arc::new(FsUserRepository::new((*storage).clone()));
+        let remote_repository = Arc::new(FsRemoteRepository::new((*storage).clone()));
+        
         Ok(Self {
             workspace_path: path.to_path_buf(),
             storage,
             config,
             remote_sync,
+            issue_repository,
+            project_repository,
+            user_repository,
+            remote_repository,
         })
     }
 }

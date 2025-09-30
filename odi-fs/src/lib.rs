@@ -9,10 +9,12 @@ use thiserror::Error;
 pub mod config;
 pub mod storage;
 pub mod git;
+pub mod repository;
 
 // Re-export important types
 pub use config::{Config, UserConfig, ProjectConfig, RemoteConfig, WorkspaceConfig, ConfigLoader, FileConfigLoader, load_config, save_config};
 pub use storage::{ObjectType, ObjectHash, StorageObject, ObjectRef, StorageLock, Lock, ObjectStorage, StorageEngine, FileSystemStorage};
+pub use repository::{FsIssueRepository, FsProjectRepository, FsUserRepository, FsRemoteRepository};
 
 #[derive(Error, Debug)]
 pub enum FsError {

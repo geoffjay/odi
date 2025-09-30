@@ -12,10 +12,30 @@ pub mod user;
 
 // Re-exports for consumers
 pub use error::{CoreError, Result};
-pub use issue::{Issue, IssueId, IssueStatus, Priority};
-pub use project::{Label, LabelId, Project, ProjectId, Workspace, WorkspaceId};
-pub use sync::{ConflictResolution, ConflictType, Remote, RemoteId, SyncEngine, SyncResult};
-pub use user::{Team, TeamId, User, UserId};
+
+// Issue entities and types
+pub use issue::{
+    Issue, IssueId, IssueStatus, Priority,
+    IssueRepository, IssueQuery, IssueUpdate,
+};
+
+// User entities and types
+pub use user::{
+    User, UserId, Team, TeamId,
+    UserRepository, UserQuery, UserUpdate, TeamQuery, TeamUpdate,
+};
+
+// Project entities and types
+pub use project::{
+    Project, ProjectId, Workspace, WorkspaceId, Label, LabelId,
+    ProjectRepository, ProjectQuery, ProjectUpdate, WorkspaceQuery, WorkspaceUpdate, LabelQuery,
+};
+
+// Sync entities and types
+pub use sync::{
+    Remote, RemoteId, RemoteRepository, SyncEngine, SyncResult, Conflict, ConflictType, ConflictResolution,
+    SyncOptions, SyncStats, BatchConflictStrategy, RemoteInfo, detect_conflict_type,
+};
 
 /// Current version of the ODI core library
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
