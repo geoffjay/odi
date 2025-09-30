@@ -32,6 +32,8 @@ pub enum Commands {
     Config(ConfigArgs),
     /// Label management commands
     Label(LabelArgs),
+    /// Filesystem check and repair
+    Fsck(FsckArgs),
 }
 
 impl Cli {
@@ -74,6 +76,12 @@ impl Cli {
             },
             Commands::Label(args) => {
                 // Require workspace for label commands
+                AppContext::require_workspace(None)?;
+                let ctx = AppContext::new(None).await?;
+                args.execute(&ctx).await
+            },
+            Commands::Fsck(args) => {
+                // Require workspace for fsck
                 AppContext::require_workspace(None)?;
                 let ctx = AppContext::new(None).await?;
                 args.execute(&ctx).await

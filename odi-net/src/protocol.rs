@@ -15,6 +15,11 @@ pub trait ProtocolHandler: Send + Sync {
     async fn post(&self, path: &str, data: &[u8], auth: &AuthToken) -> Result<Vec<u8>>;
     async fn put(&self, path: &str, data: &[u8], auth: &AuthToken) -> Result<Vec<u8>>;
     async fn delete(&self, path: &str, auth: &AuthToken) -> Result<()>;
+    
+    // Object-level operations for sync
+    async fn list_objects(&self, base_url: &str, path: &str) -> Result<Vec<String>>;
+    async fn download_object(&self, base_url: &str, object_path: &str) -> Result<Vec<u8>>;
+    async fn upload_object(&self, base_url: &str, object_path: &str, data: &[u8]) -> Result<()>;
 }
 
 pub struct HttpsHandler;
@@ -58,18 +63,34 @@ impl SshHandler {
                 message: format!("Invalid auth token: {}", e),
             })?;
 
+        let auth_type = auth_data["type"].as_str().unwrap_or("ssh_key");
+
         // For now, we'll use a simple approach with std::process to execute SSH commands
         // This is a basic implementation that works with our Docker setup
         match operation {
             "get" => {
-                let output = tokio::process::Command::new("ssh")
-                    .arg("-p").arg(port.to_string())
-                    .arg("-o").arg("StrictHostKeyChecking=no")
-                    .arg("-o").arg("UserKnownHostsFile=/dev/null")
-                    .arg(format!("{}@{}", username, host))
-                    .arg(format!("cat {}", remote_path))
-                    .output()
-                    .await
+                let mut cmd = if auth_type == "password" {
+                    let password = auth_data["password"].as_str().unwrap_or("");
+                    let mut sshpass_cmd = tokio::process::Command::new("sshpass");
+                    sshpass_cmd.arg("-p").arg(password)
+                              .arg("ssh")
+                              .arg("-p").arg(port.to_string())
+                              .arg("-o").arg("StrictHostKeyChecking=no")
+                              .arg("-o").arg("UserKnownHostsFile=/dev/null")
+                              .arg(format!("{}@{}", username, host))
+                              .arg(format!("cat {}", remote_path));
+                    sshpass_cmd
+                } else {
+                    let mut ssh_cmd = tokio::process::Command::new("ssh");
+                    ssh_cmd.arg("-p").arg(port.to_string())
+                           .arg("-o").arg("StrictHostKeyChecking=no")
+                           .arg("-o").arg("UserKnownHostsFile=/dev/null")
+                           .arg(format!("{}@{}", username, host))
+                           .arg(format!("cat {}", remote_path));
+                    ssh_cmd
+                };
+
+                let output = cmd.output().await
                     .map_err(|e| NetError::Protocol {
                         message: format!("SSH command failed: {}", e),
                     })?;
@@ -98,14 +119,28 @@ impl SshHandler {
                         message: format!("Failed to write temp file: {}", e),
                     })?;
 
-                let output = tokio::process::Command::new("scp")
-                    .arg("-P").arg(port.to_string())
-                    .arg("-o").arg("StrictHostKeyChecking=no")
-                    .arg("-o").arg("UserKnownHostsFile=/dev/null")
-                    .arg(temp_file.path())
-                    .arg(format!("{}@{}:{}", username, host, remote_path))
-                    .output()
-                    .await
+                let mut cmd = if auth_type == "password" {
+                    let password = auth_data["password"].as_str().unwrap_or("");
+                    let mut sshpass_cmd = tokio::process::Command::new("sshpass");
+                    sshpass_cmd.arg("-p").arg(password)
+                              .arg("scp")
+                              .arg("-P").arg(port.to_string())
+                              .arg("-o").arg("StrictHostKeyChecking=no")
+                              .arg("-o").arg("UserKnownHostsFile=/dev/null")
+                              .arg(temp_file.path())
+                              .arg(format!("{}@{}:{}", username, host, remote_path));
+                    sshpass_cmd
+                } else {
+                    let mut scp_cmd = tokio::process::Command::new("scp");
+                    scp_cmd.arg("-P").arg(port.to_string())
+                           .arg("-o").arg("StrictHostKeyChecking=no")
+                           .arg("-o").arg("UserKnownHostsFile=/dev/null")
+                           .arg(temp_file.path())
+                           .arg(format!("{}@{}:{}", username, host, remote_path));
+                    scp_cmd
+                };
+
+                let output = cmd.output().await
                     .map_err(|e| NetError::Protocol {
                         message: format!("SCP command failed: {}", e),
                     })?;
@@ -119,14 +154,28 @@ impl SshHandler {
                 Ok(Vec::new()) // Success, no data returned
             },
             "delete" => {
-                let output = tokio::process::Command::new("ssh")
-                    .arg("-p").arg(port.to_string())
-                    .arg("-o").arg("StrictHostKeyChecking=no")
-                    .arg("-o").arg("UserKnownHostsFile=/dev/null")
-                    .arg(format!("{}@{}", username, host))
-                    .arg(format!("rm -f {}", remote_path))
-                    .output()
-                    .await
+                let mut cmd = if auth_type == "password" {
+                    let password = auth_data["password"].as_str().unwrap_or("");
+                    let mut sshpass_cmd = tokio::process::Command::new("sshpass");
+                    sshpass_cmd.arg("-p").arg(password)
+                              .arg("ssh")
+                              .arg("-p").arg(port.to_string())
+                              .arg("-o").arg("StrictHostKeyChecking=no")
+                              .arg("-o").arg("UserKnownHostsFile=/dev/null")
+                              .arg(format!("{}@{}", username, host))
+                              .arg(format!("rm -f {}", remote_path));
+                    sshpass_cmd
+                } else {
+                    let mut ssh_cmd = tokio::process::Command::new("ssh");
+                    ssh_cmd.arg("-p").arg(port.to_string())
+                           .arg("-o").arg("StrictHostKeyChecking=no")
+                           .arg("-o").arg("UserKnownHostsFile=/dev/null")
+                           .arg(format!("{}@{}", username, host))
+                           .arg(format!("rm -f {}", remote_path));
+                    ssh_cmd
+                };
+
+                let output = cmd.output().await
                     .map_err(|e| NetError::Protocol {
                         message: format!("SSH command failed: {}", e),
                     })?;
@@ -239,6 +288,39 @@ impl ProtocolHandler for HttpsHandler {
         
         Ok(())
     }
+
+    async fn list_objects(&self, base_url: &str, path: &str) -> Result<Vec<String>> {
+        // For HTTPS, we need an API endpoint to list objects
+        // This is a simplified implementation
+        let list_url = format!("{}/list/{}", base_url, path);
+        let credentials = crate::Credential::Token { value: "dummy".to_string() };
+        let auth = self.authenticate(&credentials).await?;
+        
+        match self.get(&list_url, &auth).await {
+            Ok(data) => {
+                let list_str = String::from_utf8_lossy(&data);
+                Ok(list_str.lines().map(|s| s.to_string()).collect())
+            },
+            Err(_) => Ok(Vec::new()) // Return empty list if listing fails
+        }
+    }
+
+    async fn download_object(&self, base_url: &str, object_path: &str) -> Result<Vec<u8>> {
+        let object_url = format!("{}/{}", base_url, object_path);
+        let credentials = crate::Credential::Token { value: "dummy".to_string() };
+        let auth = self.authenticate(&credentials).await?;
+        
+        self.get(&object_url, &auth).await
+    }
+
+    async fn upload_object(&self, base_url: &str, object_path: &str, data: &[u8]) -> Result<()> {
+        let object_url = format!("{}/{}", base_url, object_path);
+        let credentials = crate::Credential::Token { value: "dummy".to_string() };
+        let auth = self.authenticate(&credentials).await?;
+        
+        self.put(&object_url, data, &auth).await?;
+        Ok(())
+    }
 }
 
 #[async_trait::async_trait]
@@ -258,8 +340,20 @@ impl ProtocolHandler for SshHandler {
                     refresh_token: None,
                 })
             },
+            crate::Credential::Password { username, password } => {
+                let token_data = serde_json::json!({
+                    "type": "password",
+                    "username": username,
+                    "password": password
+                });
+                Ok(AuthToken {
+                    token: token_data.to_string(),
+                    expires_at: None,
+                    refresh_token: None,
+                })
+            },
             _ => Err(NetError::Protocol {
-                message: "SSH requires SSH key authentication".to_string(),
+                message: "SSH requires SSH key or password authentication".to_string(),
             }),
         }
     }
@@ -279,5 +373,193 @@ impl ProtocolHandler for SshHandler {
     async fn delete(&self, path: &str, auth: &AuthToken) -> Result<()> {
         self.ssh_operation(path, None, "delete", auth).await?;
         Ok(())
+    }
+
+    async fn list_objects(&self, base_url: &str, path: &str) -> Result<Vec<String>> {
+        // Parse SSH URL to get connection details
+        let url = url::Url::parse(base_url).map_err(|e| NetError::Protocol {
+            message: format!("Invalid SSH URL: {}", e),
+        })?;
+
+        let host = url.host_str().ok_or_else(|| NetError::Protocol {
+            message: "No host in SSH URL".to_string(),
+        })?;
+        
+        let port = url.port().unwrap_or(22);
+        let base_path = url.path();
+        let username = url.username();
+        
+        let remote_path = format!("{}/{}", base_path, path);
+
+        // Check for password in URL for authentication
+        let mut cmd = if let Some(password) = url.password() {
+            let mut sshpass_cmd = tokio::process::Command::new("sshpass");
+            sshpass_cmd.arg("-p").arg(password)
+                      .arg("ssh")
+                      .arg("-p").arg(port.to_string())
+                      .arg("-o").arg("StrictHostKeyChecking=no")
+                      .arg("-o").arg("UserKnownHostsFile=/dev/null")
+                      .arg(format!("{}@{}", username, host))
+                      .arg(format!("ls -1 {}", remote_path));
+            sshpass_cmd
+        } else {
+            let mut ssh_cmd = tokio::process::Command::new("ssh");
+            ssh_cmd.arg("-p").arg(port.to_string())
+                   .arg("-o").arg("StrictHostKeyChecking=no")
+                   .arg("-o").arg("UserKnownHostsFile=/dev/null")
+                   .arg(format!("{}@{}", username, host))
+                   .arg(format!("ls -1 {}", remote_path));
+            ssh_cmd
+        };
+
+        let output = cmd.output().await
+            .map_err(|e| NetError::Protocol {
+                message: format!("SSH list command failed: {}", e),
+            })?;
+
+        if output.status.success() {
+            let list_str = String::from_utf8_lossy(&output.stdout);
+            Ok(list_str.lines().filter(|s| !s.is_empty()).map(|s| s.to_string()).collect())
+        } else {
+            // Directory might not exist, return empty list
+            Ok(Vec::new())
+        }
+    }
+
+    async fn download_object(&self, base_url: &str, object_path: &str) -> Result<Vec<u8>> {
+        // Parse SSH URL to get connection details
+        let url = url::Url::parse(base_url).map_err(|e| NetError::Protocol {
+            message: format!("Invalid SSH URL: {}", e),
+        })?;
+
+        let host = url.host_str().ok_or_else(|| NetError::Protocol {
+            message: "No host in SSH URL".to_string(),
+        })?;
+        
+        let port = url.port().unwrap_or(22);
+        let base_path = url.path();
+        let username = url.username();
+        
+        let remote_path = format!("{}/{}", base_path, object_path);
+
+        // Check for password in URL for authentication
+        let mut cmd = if let Some(password) = url.password() {
+            let mut sshpass_cmd = tokio::process::Command::new("sshpass");
+            sshpass_cmd.arg("-p").arg(password)
+                      .arg("ssh")
+                      .arg("-p").arg(port.to_string())
+                      .arg("-o").arg("StrictHostKeyChecking=no")
+                      .arg("-o").arg("UserKnownHostsFile=/dev/null")
+                      .arg(format!("{}@{}", username, host))
+                      .arg(format!("cat {}", remote_path));
+            sshpass_cmd
+        } else {
+            let mut ssh_cmd = tokio::process::Command::new("ssh");
+            ssh_cmd.arg("-p").arg(port.to_string())
+                   .arg("-o").arg("StrictHostKeyChecking=no")
+                   .arg("-o").arg("UserKnownHostsFile=/dev/null")
+                   .arg(format!("{}@{}", username, host))
+                   .arg(format!("cat {}", remote_path));
+            ssh_cmd
+        };
+
+        let output = cmd.output().await
+            .map_err(|e| NetError::Protocol {
+                message: format!("SSH download command failed: {}", e),
+            })?;
+
+        if output.status.success() {
+            Ok(output.stdout)
+        } else {
+            Err(NetError::Protocol {
+                message: format!("SSH download failed: {}", String::from_utf8_lossy(&output.stderr)),
+            })
+        }
+    }
+
+    async fn upload_object(&self, base_url: &str, object_path: &str, data: &[u8]) -> Result<()> {
+        // Parse SSH URL to get connection details
+        let url = url::Url::parse(base_url).map_err(|e| NetError::Protocol {
+            message: format!("Invalid SSH URL: {}", e),
+        })?;
+
+        let host = url.host_str().ok_or_else(|| NetError::Protocol {
+            message: "No host in SSH URL".to_string(),
+        })?;
+        
+        let port = url.port().unwrap_or(22);
+        let base_path = url.path();
+        let username = url.username();
+        
+        let remote_path = format!("{}/{}", base_path, object_path);
+
+        // Create remote directory structure first
+        let remote_dir = std::path::Path::new(&remote_path).parent().unwrap().to_string_lossy();
+        
+        let mut mkdir_cmd = if let Some(password) = url.password() {
+            let mut sshpass_cmd = tokio::process::Command::new("sshpass");
+            sshpass_cmd.arg("-p").arg(password)
+                      .arg("ssh")
+                      .arg("-p").arg(port.to_string())
+                      .arg("-o").arg("StrictHostKeyChecking=no")
+                      .arg("-o").arg("UserKnownHostsFile=/dev/null")
+                      .arg(format!("{}@{}", username, host))
+                      .arg(format!("mkdir -p {}", remote_dir));
+            sshpass_cmd
+        } else {
+            let mut ssh_cmd = tokio::process::Command::new("ssh");
+            ssh_cmd.arg("-p").arg(port.to_string())
+                   .arg("-o").arg("StrictHostKeyChecking=no")
+                   .arg("-o").arg("UserKnownHostsFile=/dev/null")
+                   .arg(format!("{}@{}", username, host))
+                   .arg(format!("mkdir -p {}", remote_dir));
+            ssh_cmd
+        };
+        
+        let _mkdir_output = mkdir_cmd.output().await;
+
+        // Use SCP to upload the file
+        let temp_file = tempfile::NamedTempFile::new()
+            .map_err(|e| NetError::Protocol {
+                message: format!("Failed to create temp file: {}", e),
+            })?;
+
+        tokio::fs::write(temp_file.path(), data).await
+            .map_err(|e| NetError::Protocol {
+                message: format!("Failed to write temp file: {}", e),
+            })?;
+
+        let mut cmd = if let Some(password) = url.password() {
+            let mut sshpass_cmd = tokio::process::Command::new("sshpass");
+            sshpass_cmd.arg("-p").arg(password)
+                      .arg("scp")
+                      .arg("-P").arg(port.to_string())
+                      .arg("-o").arg("StrictHostKeyChecking=no")
+                      .arg("-o").arg("UserKnownHostsFile=/dev/null")
+                      .arg(temp_file.path())
+                      .arg(format!("{}@{}:{}", username, host, remote_path));
+            sshpass_cmd
+        } else {
+            let mut scp_cmd = tokio::process::Command::new("scp");
+            scp_cmd.arg("-P").arg(port.to_string())
+                   .arg("-o").arg("StrictHostKeyChecking=no")
+                   .arg("-o").arg("UserKnownHostsFile=/dev/null")
+                   .arg(temp_file.path())
+                   .arg(format!("{}@{}:{}", username, host, remote_path));
+            scp_cmd
+        };
+
+        let output = cmd.output().await
+            .map_err(|e| NetError::Protocol {
+                message: format!("SCP upload command failed: {}", e),
+            })?;
+
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(NetError::Protocol {
+                message: format!("SSH upload failed: {}", String::from_utf8_lossy(&output.stderr)),
+            })
+        }
     }
 }

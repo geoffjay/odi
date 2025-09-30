@@ -88,9 +88,17 @@ impl RemoteSync for DefaultRemoteSync {
 
         // Extract credentials from URL or use defaults
         let credentials = if let Some(password) = url.password() {
-            // If password is provided in URL, treat as token
-            Credential::Token {
-                value: password.to_string(),
+            // If password is provided in URL, treat as password auth for SSH
+            if protocol == Protocol::SSH {
+                Credential::Password {
+                    username: url.username().to_string(),
+                    password: password.to_string(),
+                }
+            } else {
+                // For HTTPS, treat as token
+                Credential::Token {
+                    value: password.to_string(),
+                }
             }
         } else {
             // For SSH without credentials in URL, try default SSH key
@@ -124,88 +132,102 @@ impl RemoteSync for DefaultRemoteSync {
             message: format!("Invalid remote URL '{}': {}", client.remote_url, e),
         })?;
         
-        // For now, simulate listing remote issues
-        // In a real implementation, this would make SSH/HTTPS requests
         println!("📡 Listing issues from remote: {}", client.remote_url);
         
-        // Simulate remote issues storage structure
-        let remote_path = format!("/tmp/odi-remote-{}", url.path().trim_start_matches('/').replace("/", "-"));
-        if !std::path::Path::new(&remote_path).exists() {
-            std::fs::create_dir_all(&remote_path).map_err(|e| NetError::Sync {
-                message: format!("Failed to create remote simulation directory: {}", e),
-            })?;
-        }
-        
-        // Try to read remote issues (simulated)
-        let remote_issues_path = format!("{}/issues", remote_path);
-        if std::path::Path::new(&remote_issues_path).exists() {
-            let mut metadata = Vec::new();
-            for entry in std::fs::read_dir(&remote_issues_path).map_err(|e| NetError::Sync {
-                message: format!("Failed to read remote issues: {}", e),
-            })? {
-                let entry = entry.map_err(|e| NetError::Sync {
-                    message: format!("Failed to read directory entry: {}", e),
-                })?;
+        // Get protocol and create handler
+        let protocol = if url.scheme() == "ssh" {
+            Protocol::SSH
+        } else if url.scheme() == "https" {
+            Protocol::HTTPS
+        } else {
+            return Err(NetError::Sync {
+                message: format!("Unsupported protocol: {}", url.scheme()),
+            });
+        };
+
+        let handler: Box<dyn ProtocolHandler> = match protocol {
+            Protocol::SSH => Box::new(SshHandler::new()),
+            Protocol::HTTPS => Box::new(HttpsHandler::new()),
+        };
+
+        // List remote issues using protocol handler
+        match handler.list_objects(&client.remote_url, "issues").await {
+            Ok(object_list) => {
+                let mut metadata = Vec::new();
                 
-                if let Some(file_name) = entry.file_name().to_str() {
-                    if file_name.ends_with(".bin") {
-                        let id_str = file_name.trim_end_matches(".bin");
+                for object_name in object_list {
+                    if object_name.ends_with(".bin") {
+                        let id_str = object_name.trim_end_matches(".bin");
                         if let Ok(id) = id_str.parse::<IssueId>() {
-                            // Read the issue file to get metadata
-                            let issue_data = std::fs::read(entry.path()).map_err(|e| NetError::Sync {
-                                message: format!("Failed to read issue file: {}", e),
-                            })?;
-                            
-                            // Deserialize the issue to extract metadata
-                            let issue: Issue = bincode::deserialize(&issue_data).map_err(|e| NetError::Sync {
-                                message: format!("Failed to deserialize issue: {}", e),
-                            })?;
-                            
-                            metadata.push(IssueMetadata {
-                                id: issue.id,
-                                title: issue.title.clone(),
-                                status: issue.status.clone(),
-                                priority: issue.priority.clone(),
-                                last_modified: issue.updated_at,
-                                checksum: format!("{:x}", md5::compute(&issue_data)),
-                            });
+                            // Download issue metadata via protocol handler  
+                            match handler.download_object(&client.remote_url, &format!("issues/{}", object_name)).await {
+                                Ok(issue_data) => {
+                                    // Deserialize the issue to extract metadata
+                                    match bincode::deserialize::<Issue>(&issue_data) {
+                                        Ok(issue) => {
+                                            metadata.push(IssueMetadata {
+                                                id: issue.id,
+                                                title: issue.title.clone(),
+                                                status: issue.status.clone(),
+                                                priority: issue.priority.clone(),
+                                                last_modified: issue.updated_at,
+                                                checksum: format!("{:x}", md5::compute(&issue_data)),
+                                            });
+                                        },
+                                        Err(e) => {
+                                            println!("⚠️  Failed to deserialize issue {}: {}", id, e);
+                                        }
+                                    }
+                                },
+                                Err(e) => {
+                                    println!("⚠️  Failed to download issue {}: {}", id, e);
+                                }
+                            }
                         }
                     }
                 }
+                
+                Ok(metadata)
+            },
+            Err(_) => {
+                // Remote might not exist yet or have no issues
+                Ok(Vec::new())
             }
-            Ok(metadata)
-        } else {
-            Ok(Vec::new())
         }
     }
 
     async fn download_issue(&self, client: &SyncClient, id: &IssueId) -> Result<Issue> {
-        // Parse remote URL to get connection details
+        // Parse remote URL to get connection details  
         let url = url::Url::parse(&client.remote_url).map_err(|e| NetError::Sync {
             message: format!("Invalid remote URL '{}': {}", client.remote_url, e),
         })?;
         
         println!("📥 Downloading issue {} from remote: {}", id, client.remote_url);
         
-        // Simulate remote issues storage structure
-        let remote_path = format!("/tmp/odi-remote-{}", url.path().trim_start_matches('/').replace("/", "-"));
-        let issue_file_path = format!("{}/issues/{}.bin", remote_path, id);
-        
-        if std::path::Path::new(&issue_file_path).exists() {
-            let issue_data = std::fs::read(&issue_file_path).map_err(|e| NetError::Sync {
-                message: format!("Failed to read remote issue file: {}", e),
-            })?;
-            
-            let issue: Issue = bincode::deserialize(&issue_data).map_err(|e| NetError::Sync {
-                message: format!("Failed to deserialize remote issue: {}", e),
-            })?;
-            
-            Ok(issue)
+        // Get protocol and create handler
+        let protocol = if url.scheme() == "ssh" {
+            Protocol::SSH
+        } else if url.scheme() == "https" {
+            Protocol::HTTPS
         } else {
-            Err(NetError::Sync {
-                message: format!("Issue {} not found on remote", id),
-            })
-        }
+            return Err(NetError::Sync {
+                message: format!("Unsupported protocol: {}", url.scheme()),
+            });
+        };
+
+        let handler: Box<dyn ProtocolHandler> = match protocol {
+            Protocol::SSH => Box::new(SshHandler::new()),
+            Protocol::HTTPS => Box::new(HttpsHandler::new()),
+        };
+
+        // Download issue using protocol handler
+        let issue_data = handler.download_object(&client.remote_url, &format!("issues/{}.bin", id)).await?;
+        
+        let issue: Issue = bincode::deserialize(&issue_data).map_err(|e| NetError::Sync {
+            message: format!("Failed to deserialize remote issue: {}", e),
+        })?;
+        
+        Ok(issue)
     }
 
     async fn upload_issue(&self, client: &SyncClient, issue: &Issue) -> Result<()> {
@@ -216,24 +238,29 @@ impl RemoteSync for DefaultRemoteSync {
         
         println!("📤 Uploading issue {} to remote: {}", issue.id, client.remote_url);
         
-        // Simulate remote issues storage structure
-        let remote_path = format!("/tmp/odi-remote-{}", url.path().trim_start_matches('/').replace("/", "-"));
-        let issues_path = format!("{}/issues", remote_path);
-        
-        // Create remote directory if it doesn't exist
-        std::fs::create_dir_all(&issues_path).map_err(|e| NetError::Sync {
-            message: format!("Failed to create remote issues directory: {}", e),
-        })?;
-        
-        // Serialize and write the issue
+        // Get protocol and create handler
+        let protocol = if url.scheme() == "ssh" {
+            Protocol::SSH
+        } else if url.scheme() == "https" {
+            Protocol::HTTPS  
+        } else {
+            return Err(NetError::Sync {
+                message: format!("Unsupported protocol: {}", url.scheme()),
+            });
+        };
+
+        let handler: Box<dyn ProtocolHandler> = match protocol {
+            Protocol::SSH => Box::new(SshHandler::new()),
+            Protocol::HTTPS => Box::new(HttpsHandler::new()),
+        };
+
+        // Serialize the issue
         let issue_data = bincode::serialize(issue).map_err(|e| NetError::Sync {
             message: format!("Failed to serialize issue: {}", e),
         })?;
         
-        let issue_file_path = format!("{}/{}.bin", issues_path, issue.id);
-        std::fs::write(&issue_file_path, &issue_data).map_err(|e| NetError::Sync {
-            message: format!("Failed to write remote issue file: {}", e),
-        })?;
+        // Upload issue using protocol handler
+        handler.upload_object(&client.remote_url, &format!("issues/{}.bin", issue.id), &issue_data).await?;
         
         Ok(())
     }

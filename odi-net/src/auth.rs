@@ -19,6 +19,7 @@ pub struct AuthToken {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Credential {
     SshKey { path: PathBuf, passphrase: Option<String> },
+    Password { username: String, password: String },
     Token { value: String },
     OAuth { client_id: String, refresh_token: String },
 }

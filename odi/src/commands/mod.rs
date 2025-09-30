@@ -1,6 +1,7 @@
 //! CLI command implementations
 
 pub mod config;
+pub mod fsck;
 pub mod init;
 pub mod issue;
 pub mod label;
@@ -10,6 +11,7 @@ pub mod team;
 
 // Re-exports
 pub use config::ConfigArgs;
+pub use fsck::FsckArgs;
 pub use init::InitArgs;
 pub use issue::IssueArgs;
 pub use label::LabelArgs;
