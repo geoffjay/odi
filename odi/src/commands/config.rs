@@ -24,6 +24,16 @@ pub enum ConfigSubcommand {
         /// Configuration value
         value: String 
     },
+    /// Remove a configuration value
+    Unset { 
+        /// Configuration key to remove
+        key: String 
+    },
+    /// Reset configuration section
+    Reset { 
+        /// Configuration section to reset (e.g., user, project, remotes)
+        section: String 
+    },
     /// List all configuration values
     List,
 }
@@ -36,6 +46,12 @@ impl ConfigArgs {
             },
             ConfigSubcommand::Set { key, value } => {
                 set_config_value(ctx, key, value).await
+            },
+            ConfigSubcommand::Unset { key } => {
+                unset_config_value(ctx, key).await
+            },
+            ConfigSubcommand::Reset { section } => {
+                reset_config_section(ctx, section).await
             },
             ConfigSubcommand::List => {
                 list_config_values(ctx).await
@@ -204,6 +220,91 @@ fn set_value_by_path(config: &mut Config, key: &str, value: &str) -> Result<()> 
             });
         }
     }
+    
+    Ok(())
+}
+
+async fn unset_config_value(ctx: &AppContext, key: &str) -> Result<()> {
+    let mut config = ctx.config().clone();
+    
+    let parts: Vec<&str> = key.split('.').collect();
+    
+    match &parts[..] {
+        ["user", "name"] => {
+            config.user.name = String::new(); // Set to empty string instead of None
+        },
+        ["user", "email"] => {
+            config.user.email = String::new();
+        },
+        ["project", "name"] => {
+            config.project.name = String::new();
+        },
+        ["project", "description"] => {
+            config.project.description = None;
+        },
+        ["project", "default_branch"] => {
+            config.project.default_branch = None;
+        },
+        ["remotes", remote_name, "url"] => {
+            if let Some(remote) = config.remotes.get_mut(*remote_name) {
+                remote.url = String::new(); // Set to empty string rather than removing
+            } else {
+                return Err(OdiError::Config { 
+                    message: format!("Remote '{}' does not exist", remote_name) 
+                });
+            }
+        },
+        ["remotes", remote_name, "protocol"] => {
+            if let Some(remote) = config.remotes.get_mut(*remote_name) {
+                remote.protocol = "ssh".to_string(); // Set to default protocol
+            } else {
+                return Err(OdiError::Config { 
+                    message: format!("Remote '{}' does not exist", remote_name) 
+                });
+            }
+        },
+        _ => {
+            return Err(OdiError::Config { 
+                message: format!("Cannot unset configuration key: {}", key) 
+            });
+        }
+    }
+    
+    // Save updated config
+    save_config(&config)?;
+    
+    println!("Unset configuration: {}", key);
+    Ok(())
+}
+
+async fn reset_config_section(ctx: &AppContext, section: &str) -> Result<()> {
+    let mut config = ctx.config().clone();
+    
+    match section {
+        "user" => {
+            config.user.name = String::new();
+            config.user.email = String::new();
+            println!("Reset user configuration");
+        },
+        "project" => {
+            config.project.name = String::new();
+            config.project.description = None;
+            config.project.default_branch = None;
+            println!("Reset project configuration");
+        },
+        "remotes" => {
+            config.remotes.clear();
+            println!("Reset remotes configuration");
+        },
+        _ => {
+            return Err(OdiError::Config { 
+                message: format!("Unknown configuration section: {}. Supported sections: user, project, remotes", section) 
+            });
+        }
+    }
+    
+    // Save updated config
+    save_config(&config)?;
     
     Ok(())
 }

@@ -149,6 +149,28 @@ impl FileSystemStorage {
         self.objects_path.join(dir).join(file)
     }
     
+    fn list_refs_recursive(&self, dir_path: &Path, prefix: &str, refs: &mut Vec<ObjectRef>) -> Result<()> {
+        for entry in fs::read_dir(dir_path)? {
+            let entry = entry?;
+            let file_name = entry.file_name().to_string_lossy().to_string();
+            let full_name = if prefix.is_empty() {
+                file_name.clone()
+            } else {
+                format!("{}/{}", prefix, file_name)
+            };
+            
+            if entry.file_type()?.is_dir() {
+                // Recursively read subdirectories
+                self.list_refs_recursive(&entry.path(), &full_name, refs)?;
+            } else if entry.file_type()?.is_file() {
+                if let Ok(Some(object_ref)) = self.get_ref(&full_name) {
+                    refs.push(object_ref);
+                }
+            }
+        }
+        Ok(())
+    }
+    
     fn compress_data(data: &[u8]) -> Result<Vec<u8>> {
         let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
         encoder.write_all(data)?;
@@ -316,17 +338,7 @@ impl ObjectStorage for FileSystemStorage {
     
     fn list_refs(&self) -> Result<Vec<ObjectRef>> {
         let mut refs = Vec::new();
-        
-        for entry in fs::read_dir(&self.refs_path)? {
-            let entry = entry?;
-            if entry.file_type()?.is_file() {
-                let file_name = entry.file_name().to_string_lossy().to_string();
-                if let Ok(Some(object_ref)) = self.get_ref(&file_name) {
-                    refs.push(object_ref);
-                }
-            }
-        }
-        
+        self.list_refs_recursive(&self.refs_path, "", &mut refs)?;
         Ok(refs)
     }
     

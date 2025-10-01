@@ -37,6 +37,12 @@ pub enum OdiError {
 
     #[error("IO error: {message}")]
     Io { message: String },
+
+    #[error("Team not found: {0}")]
+    TeamNotFound(String),
+
+    #[error("User not found: {0}")]
+    UserNotFound(String),
 }
 
 // Conversion from std::io::Error
@@ -82,6 +88,12 @@ impl OdiError {
             },
             OdiError::Io { message } => {
                 format!("📁 File System Error\n{}\n\n💡 Tip: Check file permissions and paths", message)
+            },
+            OdiError::TeamNotFound(team_name) => {
+                format!("❌ Team Not Found\nTeam '{}' does not exist\n\n💡 Tip: Use 'odi team list' to see available teams", team_name)
+            },
+            OdiError::UserNotFound(user_name) => {
+                format!("❌ User Not Found\nUser '{}' does not exist\n\n💡 Tip: Check the username or create the user first", user_name)
             },
         }
     }

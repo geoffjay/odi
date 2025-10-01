@@ -49,6 +49,9 @@ pub mod user;
 // Re-exports for consumers
 pub use error::{CoreError, Result};
 
+// Legacy alias for Error (backward compatibility)
+pub use CoreError as Error;
+
 // Issue entities and types
 pub use issue::{
     Issue, IssueId, IssueStatus, Priority,

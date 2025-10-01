@@ -32,3 +32,13 @@ pub enum CoreError {
     #[error("UUID error: {0}")]
     Uuid(#[from] uuid::Error),
 }
+
+impl CoreError {
+    /// Create an InvalidInput error (commonly used validation error)
+    pub fn invalid_input(message: String) -> Self {
+        CoreError::ValidationError {
+            field: "input".to_string(),
+            message,
+        }
+    }
+}

@@ -16,6 +16,7 @@ pub type IssueId = Uuid;
 
 /// Issue status enumeration
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 pub enum IssueStatus {
     Open,
     InProgress,
@@ -25,6 +26,7 @@ pub enum IssueStatus {
 
 /// Issue priority enumeration  
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 pub enum Priority {
     Low,
     Medium,

@@ -15,7 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 # Workspace dependencies
-odi-core = { path = "../odi-core" }
+odi-core = { path = "../odi-core", features = ["clap"] }
 odi-fs = { path = "../odi-fs" }
 odi-net = { path = "../odi-net" }
 

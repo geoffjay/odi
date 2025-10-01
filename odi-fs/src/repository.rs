@@ -3,7 +3,7 @@
 //! This module provides concrete implementations of the repository traits
 //! defined in odi-core, backed by the filesystem storage engine.
 
-use crate::{storage::{FileSystemStorage, ObjectStorage, ObjectType}};
+use crate::{storage::{FileSystemStorage, ObjectStorage, ObjectType, ObjectRef}};
 use odi_core::*;
 use serde_json;
 
@@ -896,6 +896,28 @@ impl FsUserRepository {
     pub fn new(storage: FileSystemStorage) -> Self {
         Self { storage }
     }
+    
+    async fn load_team_by_ref(&self, obj_ref: &ObjectRef) -> odi_core::Result<Option<Team>> {
+        if let Some(storage_obj) = self.storage.retrieve_object(&obj_ref.hash)
+            .map_err(|e| CoreError::ValidationError { field: "storage".to_string(), message: e.to_string() })? {
+            let team: Team = serde_json::from_slice(&storage_obj.data)
+                .map_err(CoreError::Serialization)?;
+            Ok(Some(team))
+        } else {
+            Ok(None)
+        }
+    }
+    
+    async fn load_user_by_ref(&self, obj_ref: &ObjectRef) -> odi_core::Result<Option<User>> {
+        if let Some(storage_obj) = self.storage.retrieve_object(&obj_ref.hash)
+            .map_err(|e| CoreError::ValidationError { field: "storage".to_string(), message: e.to_string() })? {
+            let user: User = serde_json::from_slice(&storage_obj.data)
+                .map_err(CoreError::Serialization)?;
+            Ok(Some(user))
+        } else {
+            Ok(None)
+        }
+    }
 }
 
 #[async_trait::async_trait]
@@ -946,14 +968,57 @@ impl UserRepository for FsUserRepository {
         } else { Ok(false) }
     }
     
-    async fn list_users(&self, _query: UserQuery) -> odi_core::Result<Vec<User>> { Ok(Vec::new()) }
+    async fn list_users(&self, _query: UserQuery) -> odi_core::Result<Vec<User>> {
+        // Get all user refs and load them
+        let refs = self.storage.list_refs()
+            .map_err(|e| CoreError::ValidationError { field: "storage".to_string(), message: e.to_string() })?;
+        
+        let mut users = Vec::new();
+        for obj_ref in refs {
+            if obj_ref.name.starts_with("users/") {
+                if let Some(user) = self.load_user_by_ref(&obj_ref).await? {
+                    users.push(user);
+                }
+            }
+        }
+        Ok(users)
+    }
     async fn count_users(&self, query: UserQuery) -> odi_core::Result<usize> { Ok(self.list_users(query).await?.len()) }
-    async fn get_user_by_email(&self, email: &str) -> odi_core::Result<Option<User>> { Ok(None) }
+    async fn get_user_by_email(&self, email: &str) -> odi_core::Result<Option<User>> {
+        // Search through all users to find one with matching email
+        let users = self.list_users(UserQuery::default()).await?;
+        Ok(users.into_iter().find(|user| user.email == email))
+    }
     async fn search_users(&self, _query: &str) -> odi_core::Result<Vec<User>> { Ok(Vec::new()) }
     async fn get_user_teams(&self, user_id: &UserId) -> odi_core::Result<Vec<Team>> { Ok(Vec::new()) }
-    async fn get_team_members(&self, team_id: &TeamId) -> odi_core::Result<Vec<User>> { Ok(Vec::new()) }
-    async fn add_team_member(&self, team_id: &TeamId, user_id: &UserId) -> odi_core::Result<()> { Ok(()) }
-    async fn remove_team_member(&self, team_id: &TeamId, user_id: &UserId) -> odi_core::Result<()> { Ok(()) }
+    async fn get_team_members(&self, team_id: &TeamId) -> odi_core::Result<Vec<User>> {
+        // For simplicity, we'll check which users have this team in their teams list
+        let users = self.list_users(UserQuery::default()).await?;
+        let members: Vec<User> = users.into_iter()
+            .filter(|user| user.teams.contains(team_id))
+            .collect();
+        Ok(members)
+    }
+    async fn add_team_member(&self, team_id: &TeamId, user_id: &UserId) -> odi_core::Result<()> {
+        // Get the user and add the team to their teams list
+        if let Some(mut user) = self.get_user(user_id).await? {
+            if !user.teams.contains(team_id) {
+                user.teams.push(team_id.clone());
+                self.create_user(user).await?; // This will overwrite the existing user
+            }
+        }
+        Ok(())
+    }
+    async fn remove_team_member(&self, team_id: &TeamId, user_id: &UserId) -> odi_core::Result<()> {
+        // Get the user and remove the team from their teams list
+        if let Some(mut user) = self.get_user(user_id).await? {
+            if let Some(pos) = user.teams.iter().position(|x| x == team_id) {
+                user.teams.remove(pos);
+                self.create_user(user).await?; // This will overwrite the existing user
+            }
+        }
+        Ok(())
+    }
     
     async fn create_team(&self, team: Team) -> odi_core::Result<Team> {
         let serialized = serde_json::to_vec(&team).map_err(CoreError::Serialization)?;
@@ -995,7 +1060,21 @@ impl UserRepository for FsUserRepository {
             Ok(deleted_obj && deleted_ref)
         } else { Ok(false) }
     }
-    async fn list_teams(&self, _query: TeamQuery) -> odi_core::Result<Vec<Team>> { Ok(Vec::new()) }
+    async fn list_teams(&self, _query: TeamQuery) -> odi_core::Result<Vec<Team>> {
+        // Get all team refs and load them
+        let refs = self.storage.list_refs()
+            .map_err(|e| CoreError::ValidationError { field: "storage".to_string(), message: e.to_string() })?;
+        
+        let mut teams = Vec::new();
+        for obj_ref in refs {
+            if obj_ref.name.starts_with("teams/") {
+                if let Some(team) = self.load_team_by_ref(&obj_ref).await? {
+                    teams.push(team);
+                }
+            }
+        }
+        Ok(teams)
+    }
     async fn count_teams(&self, query: TeamQuery) -> odi_core::Result<usize> { Ok(self.list_teams(query).await?.len()) }
 }
 

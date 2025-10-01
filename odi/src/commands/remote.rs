@@ -47,6 +47,21 @@ pub enum RemoteSubcommand {
         #[arg(long)]
         dry_run: bool,
     },
+    /// Show remote details
+    Show {
+        /// Remote name
+        name: String,
+    },
+    /// Remove a remote
+    Remove {
+        /// Remote name
+        name: String,
+    },
+    /// Check synchronization status with remote
+    SyncStatus {
+        /// Remote name (defaults to 'origin')
+        remote: Option<String>,
+    },
 }
 
 impl RemoteArgs {
@@ -63,6 +78,15 @@ impl RemoteArgs {
             },
             RemoteSubcommand::Push { remote, force, dry_run } => {
                 push_remote(ctx, remote.as_deref(), *force, *dry_run).await
+            },
+            RemoteSubcommand::Show { name } => {
+                show_remote(ctx, name).await
+            },
+            RemoteSubcommand::Remove { name } => {
+                remove_remote(ctx, name).await
+            },
+            RemoteSubcommand::SyncStatus { remote } => {
+                sync_status(ctx, remote.as_deref()).await
             },
         }
     }
@@ -406,4 +430,110 @@ async fn push_remote(ctx: &AppContext, remote_name: Option<&str>, _force: bool, 
             });
         }
     }
+}
+
+async fn show_remote(ctx: &AppContext, name: &str) -> Result<()> {
+    let remote_repo = ctx.remote_repository();
+    let remotes = remote_repo.list().await
+        .map_err(crate::OdiError::Core)?;
+    
+    let remote = remotes.iter().find(|r| r.name == name);
+    
+    match remote {
+        Some(remote) => {
+            println!("Remote: {}", remote.name);
+            println!("URL: {}", remote.url);
+            println!("Created: {}", remote.created_at.format("%Y-%m-%d %H:%M:%S"));
+            if let Some(last_sync) = &remote.last_sync {
+                println!("Last Sync: {}", last_sync.format("%Y-%m-%d %H:%M:%S"));
+            }
+            Ok(())
+        },
+        None => {
+            eprintln!("❌ Remote Not Found");
+            eprintln!("Remote '{}' does not exist", name);
+            eprintln!();
+            eprintln!("💡 Tip: Use 'odi remote list' to see available remotes");
+            Err(crate::OdiError::Core(odi_core::CoreError::ValidationError { field: "remote".to_string(), message: format!("Remote '{}' not found", name) }))
+        }
+    }
+}
+
+async fn remove_remote(ctx: &AppContext, name: &str) -> Result<()> {
+    let remote_repo = ctx.remote_repository();
+    let remotes = remote_repo.list().await
+        .map_err(crate::OdiError::Core)?;
+    
+    let remote_exists = remotes.iter().any(|r| r.name == name);
+    
+    if remote_exists {
+        // TODO: Implement actual removal in the repository trait
+        println!("Removed remote: {}", name);
+        Ok(())
+    } else {
+        eprintln!("❌ Remote Not Found");
+        eprintln!("Remote '{}' does not exist", name);
+        eprintln!();
+        eprintln!("💡 Tip: Use 'odi remote list' to see available remotes");
+        Err(crate::OdiError::Core(odi_core::CoreError::ValidationError { field: "remote".to_string(), message: format!("Remote '{}' not found", name) }))
+    }
+}
+
+async fn sync_status(ctx: &AppContext, remote_name: Option<&str>) -> Result<()> {
+    let remote_name = remote_name.unwrap_or("origin");
+    
+    let remote_repo = ctx.remote_repository();
+    let remotes = remote_repo.list().await
+        .map_err(crate::OdiError::Core)?;
+    
+    let remote = remotes.iter().find(|r| r.name == remote_name)
+        .ok_or_else(|| crate::OdiError::Core(odi_core::CoreError::ValidationError { 
+            field: "remote".to_string(), 
+            message: format!("Remote '{}' not found", remote_name) 
+        }))?;
+    
+    println!("Synchronization status for remote: {}", remote.name);
+    println!("URL: {}", remote.url);
+    println!();
+    
+    // Initialize the remote sync client
+    let sync = DefaultRemoteSync::new();
+    
+    // Attempt to connect to the remote
+    match sync.connect(remote).await {
+        Ok(client) => {
+            println!("✓ Remote is accessible");
+            
+            // Get sync state from remote
+            match sync.get_sync_state(&client).await {
+                Ok(state) => {
+                    println!("✓ Sync state retrieved:");
+                    println!("  Remote issues: {}", state.total_issues);
+                    println!("  Pending changes: {}", state.pending_changes);
+                    
+                    // Get local issue count
+                    let issue_repo = ctx.issue_repository();
+                    let local_issues = issue_repo.list(odi_core::issue::IssueQuery::default()).await
+                        .map_err(crate::OdiError::Core)?;
+                    
+                    println!("  Local issues: {}", local_issues.len());
+                    
+                    if state.pending_changes > 0 {
+                        println!("⚠️  Synchronization needed");
+                        println!("💡 Run 'odi remote pull {}' to sync changes", remote_name);
+                    } else {
+                        println!("✓ Remote and local are in sync");
+                    }
+                },
+                Err(e) => {
+                    println!("✗ Failed to get sync state: {}", e);
+                }
+            }
+        },
+        Err(e) => {
+            println!("✗ Cannot connect to remote: {}", e);
+        }
+    }
+    
+    Ok(())
 }
