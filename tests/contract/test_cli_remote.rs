@@ -183,11 +183,11 @@ fn test_remote_pull() {
     // Attempt pull (this will likely fail in testing, but should show proper error handling)
     let mut pull_cmd = Command::cargo_bin("odi").expect("Failed to find odi binary");
     pull_cmd.current_dir(temp_dir.path())
-        .args(["remote", "pull", "origin"])
+        .args(["pull", "origin"])
         .assert()
         .failure() // Expected to fail in test environment
         .stderr(predicate::str::contains("Failed to connect").or(
-            predicate::str::contains("Authentication required")
+            predicate::str::contains("No credentials provided")
         ));
 }
 
@@ -210,11 +210,11 @@ fn test_remote_push() {
     // Attempt push (this will likely fail in testing, but should show proper error handling)
     let mut push_cmd = Command::cargo_bin("odi").expect("Failed to find odi binary");
     push_cmd.current_dir(temp_dir.path())
-        .args(["remote", "push", "origin"])
+        .args(["push", "origin"])
         .assert()
         .failure() // Expected to fail in test environment
         .stderr(predicate::str::contains("Failed to connect").or(
-            predicate::str::contains("Authentication required")
+            predicate::str::contains("No credentials provided")
         ));
 }
 
@@ -237,10 +237,10 @@ fn test_remote_sync_status() {
     // Check sync status
     let mut status_cmd = Command::cargo_bin("odi").expect("Failed to find odi binary");
     status_cmd.current_dir(temp_dir.path())
-        .args(["remote", "status", "origin"])
+        .args(["remote", "sync-status", "origin"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Sync status"));
+        .stdout(predicate::str::contains("Synchronization status"));
 }
 
 #[test]

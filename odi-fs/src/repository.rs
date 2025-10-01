@@ -1230,3 +1230,171 @@ impl RemoteRepository for FsRemoteRepository {
         Ok(remotes.into_iter().find(|r| r.name == name))
     }
 }
+
+/// Remote repository implementation using configuration file storage
+/// Follows Git's model where remotes are stored in configuration files
+pub struct ConfigRemoteRepository;
+
+impl ConfigRemoteRepository {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait::async_trait]
+impl RemoteRepository for ConfigRemoteRepository {
+    async fn create(&self, remote: odi_core::Remote) -> odi_core::Result<odi_core::Remote> {
+        // Load current config
+        let mut config = crate::config::load_config()
+            .map_err(|e| odi_core::CoreError::ValidationError { 
+                field: "config".to_string(), 
+                message: e.to_string() 
+            })?;
+        
+        // Check if remote already exists
+        if config.remotes.contains_key(&remote.name) {
+            return Err(odi_core::CoreError::ValidationError {
+                field: "remote".to_string(),
+                message: format!("Remote '{}' already exists", remote.name),
+            });
+        }
+        
+        // Add remote to config
+        let remote_config = crate::config::RemoteConfig {
+            url: remote.url.clone(),
+            projects: if remote.projects.is_empty() { None } else { Some(remote.projects.clone()) },
+            last_sync: remote.last_sync,
+        };
+        
+        config.remotes.insert(remote.name.clone(), remote_config);
+        
+        // Save config
+        crate::config::save_config(&config)
+            .map_err(|e| odi_core::CoreError::ValidationError { 
+                field: "config".to_string(), 
+                message: e.to_string() 
+            })?;
+        
+        Ok(remote)
+    }
+
+    async fn get(&self, id: &odi_core::RemoteId) -> odi_core::Result<Option<odi_core::Remote>> {
+        let config = crate::config::load_config()
+            .map_err(|e| odi_core::CoreError::ValidationError { 
+                field: "config".to_string(), 
+                message: e.to_string() 
+            })?;
+        
+        if let Some(remote_config) = config.remotes.get(id) {
+            let remote = odi_core::Remote {
+                id: id.clone(),
+                name: id.clone(),
+                url: remote_config.url.clone(),
+                projects: remote_config.projects.clone().unwrap_or_default(),
+                last_sync: remote_config.last_sync,
+                created_at: chrono::Utc::now(), // We don't store created_at in config
+            };
+            Ok(Some(remote))
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn update(&self, id: &odi_core::RemoteId, remote: odi_core::Remote) -> odi_core::Result<Option<odi_core::Remote>> {
+        let mut config = crate::config::load_config()
+            .map_err(|e| odi_core::CoreError::ValidationError { 
+                field: "config".to_string(), 
+                message: e.to_string() 
+            })?;
+        
+        // Check if remote exists
+        if !config.remotes.contains_key(id) {
+            return Ok(None);
+        }
+        
+        // Update remote in config
+        let remote_config = crate::config::RemoteConfig {
+            url: remote.url.clone(),
+            projects: if remote.projects.is_empty() { None } else { Some(remote.projects.clone()) },
+            last_sync: remote.last_sync,
+        };
+        
+        config.remotes.insert(id.clone(), remote_config);
+        
+        // Save config
+        crate::config::save_config(&config)
+            .map_err(|e| odi_core::CoreError::ValidationError { 
+                field: "config".to_string(), 
+                message: e.to_string() 
+            })?;
+        
+        Ok(Some(remote))
+    }
+
+    async fn delete(&self, id: &odi_core::RemoteId) -> odi_core::Result<bool> {
+        let mut config = crate::config::load_config()
+            .map_err(|e| odi_core::CoreError::ValidationError { 
+                field: "config".to_string(), 
+                message: e.to_string() 
+            })?;
+        
+        let existed = config.remotes.remove(id).is_some();
+        
+        if existed {
+            // Save config
+            crate::config::save_config(&config)
+                .map_err(|e| odi_core::CoreError::ValidationError { 
+                    field: "config".to_string(), 
+                    message: e.to_string() 
+                })?;
+        }
+        
+        Ok(existed)
+    }
+
+    async fn list(&self) -> odi_core::Result<Vec<odi_core::Remote>> {
+        let config = crate::config::load_config()
+            .map_err(|e| odi_core::CoreError::ValidationError { 
+                field: "config".to_string(), 
+                message: e.to_string() 
+            })?;
+        
+        let mut remotes = Vec::new();
+        
+        for (name, remote_config) in config.remotes {
+            let remote = odi_core::Remote {
+                id: name.clone(),
+                name,
+                url: remote_config.url,
+                projects: remote_config.projects.unwrap_or_default(),
+                last_sync: remote_config.last_sync,
+                created_at: chrono::Utc::now(), // We don't store created_at in config
+            };
+            remotes.push(remote);
+        }
+        
+        Ok(remotes)
+    }
+
+    async fn get_by_project(&self, project_id: &odi_core::ProjectId) -> odi_core::Result<Vec<odi_core::Remote>> {
+        let remotes = self.list().await?;
+        Ok(remotes.into_iter()
+            .filter(|r| r.projects.is_empty() || r.projects.contains(project_id))
+            .collect())
+    }
+
+    async fn exists(&self, name: &str) -> odi_core::Result<bool> {
+        let config = crate::config::load_config()
+            .map_err(|e| odi_core::CoreError::ValidationError { 
+                field: "config".to_string(), 
+                message: e.to_string() 
+            })?;
+        
+        Ok(config.remotes.contains_key(name))
+    }
+
+    async fn get_by_name(&self, name: &str) -> odi_core::Result<Option<odi_core::Remote>> {
+        // Since we use name as the key in config, this is the same as get()
+        self.get(&name.to_string()).await
+    }
+}

@@ -13,8 +13,8 @@ use crate::{Result, AppContext};
 ///     odi init                    # Initialize workspace in current directory
 ///     odi issue create "Bug fix"  # Create a new issue
 ///     odi remote add origin ssh://git@server/repo.odi
-///     odi remote push origin      # Push issues to remote
-///     odi remote pull origin      # Pull issues from remote
+///     odi push origin             # Push issues to remote (defaults to origin)
+///     odi pull origin             # Pull issues from remote (defaults to origin)
 #[derive(Parser)]
 #[command(name = "odi")]
 #[command(about = "A Git-like distributed issue tracking system")]
@@ -40,8 +40,16 @@ pub enum Commands {
     #[command(about = "Issue management commands\n\nCreate, list, and manage issues in your workspace.")]
     Issue(IssueArgs),
     
+    /// Push local changes to remote repository
+    #[command(about = "Push local issues to remote repository\n\nUpload local issues to the specified remote (defaults to 'origin').")]
+    Push(PushArgs),
+    
+    /// Pull changes from remote repository
+    #[command(about = "Pull remote issues to local repository\n\nDownload issues from the specified remote (defaults to 'origin').")]
+    Pull(PullArgs),
+    
     /// Remote repository commands
-    #[command(about = "Remote repository commands\n\nSynchronize issues with remote repositories via SSH/HTTPS.")]
+    #[command(about = "Remote repository management\n\nAdd, list, and manage remote repositories for synchronization.")]
     Remote(RemoteArgs),
     
     /// Team management commands
@@ -77,6 +85,18 @@ impl Cli {
             },
             Commands::Issue(args) => {
                 // Require workspace for issue commands
+                AppContext::require_workspace(None)?;
+                let ctx = AppContext::new(None).await?;
+                args.execute(&ctx).await
+            },
+            Commands::Push(args) => {
+                // Require workspace for push commands
+                AppContext::require_workspace(None)?;
+                let ctx = AppContext::new(None).await?;
+                args.execute(&ctx).await
+            },
+            Commands::Pull(args) => {
+                // Require workspace for pull commands
                 AppContext::require_workspace(None)?;
                 let ctx = AppContext::new(None).await?;
                 args.execute(&ctx).await

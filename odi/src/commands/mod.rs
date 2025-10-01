@@ -6,6 +6,8 @@ pub mod init;
 pub mod issue;
 pub mod label;
 pub mod project;
+pub mod pull;
+pub mod push;
 pub mod remote;
 pub mod team;
 
@@ -16,5 +18,7 @@ pub use init::InitArgs;
 pub use issue::IssueArgs;
 pub use label::LabelArgs;
 pub use project::ProjectArgs;
+pub use pull::PullArgs;
+pub use push::PushArgs;
 pub use remote::RemoteArgs;
 pub use team::TeamArgs;

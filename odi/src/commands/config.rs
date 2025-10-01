@@ -123,7 +123,15 @@ async fn list_config_values(ctx: &AppContext) -> Result<()> {
         println!("REMOTES");
         for (name, remote) in &config.remotes {
             println!("  remotes.{}.url = {}", name, remote.url);
-            println!("  remotes.{}.protocol = {}", name, remote.protocol);
+            // Protocol is derived from URL, not stored separately
+            let protocol = if remote.url.starts_with("ssh://") || remote.url.contains('@') {
+                "ssh"
+            } else if remote.url.starts_with("https://") {
+                "https"
+            } else {
+                "unknown"
+            };
+            println!("  remotes.{}.protocol = {} (derived)", name, protocol);
         }
     }
     
@@ -143,7 +151,16 @@ fn get_value_by_path(config: &Config, key: &str) -> Option<String> {
             config.remotes.get(*remote_name).map(|r| r.url.clone())
         },
         ["remotes", remote_name, "protocol"] => {
-            config.remotes.get(*remote_name).map(|r| r.protocol.clone())
+            // Protocol is derived from URL, not stored separately
+            config.remotes.get(*remote_name).map(|r| {
+                if r.url.starts_with("ssh://") || r.url.contains('@') {
+                    "ssh".to_string()
+                } else if r.url.starts_with("https://") {
+                    "https".to_string() 
+                } else {
+                    "unknown".to_string()
+                }
+            })
         },
         _ => None,
     }
@@ -201,22 +218,13 @@ fn set_value_by_path(config: &mut Config, key: &str, value: &str) -> Result<()> 
             }
         },
         ["remotes", remote_name, "protocol"] => {
-            if !["ssh", "https"].contains(&value) {
-                return Err(OdiError::Validation { 
-                    message: "Protocol must be 'ssh' or 'https'".to_string() 
-                });
-            }
-            if let Some(remote) = config.remotes.get_mut(*remote_name) {
-                remote.protocol = value.to_string();
-            } else {
-                return Err(OdiError::Config { 
-                    message: format!("Remote '{}' does not exist. Use 'odi remote add' first.", remote_name) 
-                });
-            }
+            return Err(OdiError::Config { 
+                message: "Protocol is derived from URL and cannot be set directly. Use remotes.<name>.url instead.".to_string() 
+            });
         },
         _ => {
             return Err(OdiError::Config { 
-                message: format!("Unknown configuration key: {}. Supported keys: user.name, user.email, project.name, project.description, project.default_branch, remotes.<name>.url, remotes.<name>.protocol", key) 
+                message: format!("Unknown configuration key: {}. Supported keys: user.name, user.email, project.name, project.description, project.default_branch, remotes.<name>.url", key) 
             });
         }
     }
@@ -255,13 +263,9 @@ async fn unset_config_value(ctx: &AppContext, key: &str) -> Result<()> {
             }
         },
         ["remotes", remote_name, "protocol"] => {
-            if let Some(remote) = config.remotes.get_mut(*remote_name) {
-                remote.protocol = "ssh".to_string(); // Set to default protocol
-            } else {
-                return Err(OdiError::Config { 
-                    message: format!("Remote '{}' does not exist", remote_name) 
-                });
-            }
+            return Err(OdiError::Config { 
+                message: "Protocol is derived from URL and cannot be unset. Use remotes.<name>.url instead.".to_string() 
+            });
         },
         _ => {
             return Err(OdiError::Config { 

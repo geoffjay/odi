@@ -9,7 +9,7 @@
 
 use std::path::{Path, PathBuf};
 
-use odi_fs::{FileSystemStorage, FileConfigLoader, Config, ConfigLoader, FsIssueRepository, FsProjectRepository, FsUserRepository, FsRemoteRepository};
+use odi_fs::{FileSystemStorage, FileConfigLoader, Config, ConfigLoader, FsIssueRepository, FsProjectRepository, FsUserRepository, ConfigRemoteRepository};
 use odi_net::sync::DefaultRemoteSync;
 use crate::{Result, OdiError};
 use std::sync::Arc;
@@ -35,7 +35,7 @@ pub struct AppContext {
     /// User repository  
     user_repository: Arc<FsUserRepository>,
     /// Remote repository
-    remote_repository: Arc<FsRemoteRepository>,
+    remote_repository: Arc<ConfigRemoteRepository>,
 }
 
 impl AppContext {
@@ -68,7 +68,7 @@ impl AppContext {
         let issue_repository = Arc::new(FsIssueRepository::new((*storage).clone()));
         let project_repository = Arc::new(FsProjectRepository::new((*storage).clone()));
         let user_repository = Arc::new(FsUserRepository::new((*storage).clone()));
-        let remote_repository = Arc::new(FsRemoteRepository::new((*storage).clone()));
+        let remote_repository = Arc::new(ConfigRemoteRepository::new());
         
         Ok(Self {
             workspace_path,
@@ -144,7 +144,7 @@ impl AppContext {
     }
     
     /// Get remote repository reference
-    pub fn remote_repository(&self) -> &Arc<FsRemoteRepository> {
+    pub fn remote_repository(&self) -> &Arc<ConfigRemoteRepository> {
         &self.remote_repository
     }
     
@@ -204,7 +204,7 @@ impl AppContext {
         let issue_repository = Arc::new(FsIssueRepository::new((*storage).clone()));
         let project_repository = Arc::new(FsProjectRepository::new((*storage).clone()));
         let user_repository = Arc::new(FsUserRepository::new((*storage).clone()));
-        let remote_repository = Arc::new(FsRemoteRepository::new((*storage).clone()));
+        let remote_repository = Arc::new(ConfigRemoteRepository::new());
         
         Ok(Self {
             workspace_path: path.to_path_buf(),

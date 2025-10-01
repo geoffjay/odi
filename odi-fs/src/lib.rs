@@ -70,7 +70,7 @@ pub mod repository;
 // Re-export important types
 pub use config::{Config, UserConfig, ProjectConfig, RemoteConfig, WorkspaceConfig, ConfigLoader, FileConfigLoader, load_config, save_config};
 pub use storage::{ObjectType, ObjectHash, StorageObject, ObjectRef, StorageLock, Lock, ObjectStorage, StorageEngine, FileSystemStorage};
-pub use repository::{FsIssueRepository, FsProjectRepository, FsUserRepository, FsRemoteRepository};
+pub use repository::{FsIssueRepository, FsProjectRepository, FsUserRepository, FsRemoteRepository, ConfigRemoteRepository};
 
 #[derive(Error, Debug)]
 pub enum FsError {

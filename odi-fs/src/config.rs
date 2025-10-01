@@ -41,7 +41,10 @@ pub struct ProjectConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RemoteConfig {
     pub url: String,
-    pub protocol: String,
+    /// Projects to sync via this remote (empty means all projects)
+    pub projects: Option<Vec<String>>,
+    /// Last sync timestamp
+    pub last_sync: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -166,9 +169,11 @@ impl ConfigLoader for FileConfigLoader {
                 });
             }
             
-            if !["ssh", "https"].contains(&remote.protocol.as_str()) {
+            // Validate URL format supports ssh:// or https:// or SSH shorthand
+            let url = &remote.url;
+            if !(url.starts_with("ssh://") || url.starts_with("https://") || url.contains('@')) {
                 return Err(crate::FsError::ConfigError {
-                    message: format!("Remote '{}' protocol must be 'ssh' or 'https'", name),
+                    message: format!("Remote '{}' URL must be SSH (ssh://user@host/path or user@host:path) or HTTPS (https://host/path)", name),
                 });
             }
         }
