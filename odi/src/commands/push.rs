@@ -18,15 +18,19 @@ pub struct PushArgs {
     /// Show what would be pushed without sending
     #[arg(long)]
     pub dry_run: bool,
+    
+    /// Project to push issues from
+    #[arg(long, short)]
+    pub project: Option<String>,
 }
 
 impl PushArgs {
     pub async fn execute(&self, ctx: &AppContext) -> Result<()> {
-        push_remote(ctx, self.remote.as_deref(), self.force, self.dry_run).await
+        push_remote(ctx, self.remote.as_deref(), self.force, self.dry_run, self.project.as_deref()).await
     }
 }
 
-async fn push_remote(ctx: &AppContext, remote_name: Option<&str>, _force: bool, dry_run: bool) -> Result<()> {
+async fn push_remote(ctx: &AppContext, remote_name: Option<&str>, _force: bool, dry_run: bool, project_id: Option<&str>) -> Result<()> {
     let remote_name = remote_name.unwrap_or("origin");
     
     // Find the remote
@@ -46,12 +50,18 @@ async fn push_remote(ctx: &AppContext, remote_name: Option<&str>, _force: bool, 
     
     if dry_run {
         println!("Dry run: Pushing to {} ({})", remote.name, remote.url);
+        if let Some(project) = project_id {
+            println!("Filtering by project: {}", project);
+        }
         println!("Would check for local changes...");
         println!("💡 Dry run mode - no changes made");
         return Ok(());
     }
     
     println!("Pushing to {} ({})", remote.name, remote.url);
+    if let Some(project) = project_id {
+        println!("Filtering by project: {}", project);
+    }
     
     // Initialize the remote sync client
     let sync = DefaultRemoteSync::new();
@@ -61,9 +71,18 @@ async fn push_remote(ctx: &AppContext, remote_name: Option<&str>, _force: bool, 
         Ok(client) => {
             println!("✓ Connected successfully to remote: {}", remote.url);
             
-            // Get local issues to push
+            // Get local issues to push, with optional project filter
             let issue_repo = ctx.issue_repository();
-            let local_issues = issue_repo.list(odi_core::issue::IssueQuery::default()).await
+            let query = if let Some(project) = project_id {
+                odi_core::IssueQuery {
+                    project_id: Some(project.to_string()),
+                    ..Default::default()
+                }
+            } else {
+                odi_core::IssueQuery::default()
+            };
+            
+            let local_issues = issue_repo.list(query).await
                 .map_err(|e| crate::OdiError::Storage { 
                     message: format!("Failed to get local issues: {}", e) 
                 })?;

@@ -18,15 +18,19 @@ pub struct PullArgs {
     /// Show what would be pulled without applying
     #[arg(long)]
     pub dry_run: bool,
+    
+    /// Project to pull issues for
+    #[arg(long, short)]
+    pub project: Option<String>,
 }
 
 impl PullArgs {
     pub async fn execute(&self, ctx: &AppContext) -> Result<()> {
-        pull_remote(ctx, self.remote.as_deref(), self.force, self.dry_run).await
+        pull_remote(ctx, self.remote.as_deref(), self.force, self.dry_run, self.project.as_deref()).await
     }
 }
 
-async fn pull_remote(ctx: &AppContext, remote_name: Option<&str>, _force: bool, dry_run: bool) -> Result<()> {
+async fn pull_remote(ctx: &AppContext, remote_name: Option<&str>, _force: bool, dry_run: bool, project_id: Option<&str>) -> Result<()> {
     let remote_name = remote_name.unwrap_or("origin");
     
     // Find the remote
@@ -46,12 +50,18 @@ async fn pull_remote(ctx: &AppContext, remote_name: Option<&str>, _force: bool, 
     
     if dry_run {
         println!("Dry run: Pulling from {} ({})", remote.name, remote.url);
+        if let Some(project) = project_id {
+            println!("Filtering by project: {}", project);
+        }
         println!("Would check for remote changes...");
         println!("No remote changes detected");
         return Ok(());
     }
     
     println!("Pulling from {} ({})", remote.name, remote.url);
+    if let Some(project) = project_id {
+        println!("Filtering by project: {}", project);
+    }
     
     // Initialize the remote sync client
     let sync = DefaultRemoteSync::new();
@@ -83,9 +93,18 @@ async fn pull_remote(ctx: &AppContext, remote_name: Option<&str>, _force: bool, 
                                 return Ok(());
                             }
                             
-                            // Get local issues for comparison
+                            // Get local issues for comparison, with optional project filter
                             let issue_repo = ctx.issue_repository();
-                            let local_issues = issue_repo.list(odi_core::issue::IssueQuery::default()).await
+                            let query = if let Some(project) = project_id {
+                                odi_core::IssueQuery {
+                                    project_id: Some(project.to_string()),
+                                    ..Default::default()
+                                }
+                            } else {
+                                odi_core::IssueQuery::default()
+                            };
+                            
+                            let local_issues = issue_repo.list(query).await
                                 .map_err(|e| crate::OdiError::Storage { 
                                     message: format!("Failed to get local issues: {}", e) 
                                 })?;
@@ -101,6 +120,13 @@ async fn pull_remote(ctx: &AppContext, remote_name: Option<&str>, _force: bool, 
                                         // Download and update the issue
                                         match sync.download_issue(&client, &remote_issue.id).await {
                                             Ok(issue) => {
+                                                // Check project filter if specified
+                                                if let Some(project) = project_id {
+                                                    if issue.project_id.as_ref() != Some(&project.to_string()) {
+                                                        continue; // Skip this issue
+                                                    }
+                                                }
+                                                
                                                 let update = odi_core::issue::IssueUpdate {
                                                     title: Some(issue.title.clone()),
                                                     description: Some(issue.description.clone()),
@@ -129,6 +155,13 @@ async fn pull_remote(ctx: &AppContext, remote_name: Option<&str>, _force: bool, 
                                     // Issue doesn't exist locally, download it
                                     match sync.download_issue(&client, &remote_issue.id).await {
                                         Ok(issue) => {
+                                            // Check project filter if specified
+                                            if let Some(project) = project_id {
+                                                if issue.project_id.as_ref() != Some(&project.to_string()) {
+                                                    continue; // Skip this issue
+                                                }
+                                            }
+                                            
                                             issue_repo.create(issue.clone()).await
                                                 .map_err(|e| crate::OdiError::Storage { 
                                                     message: format!("Failed to create issue: {}", e) 

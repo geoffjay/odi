@@ -25,6 +25,9 @@ pub enum IssueSubcommand {
         /// Priority level
         #[arg(long, value_enum)]
         priority: Option<Priority>,
+        /// Issue ID (will be generated if not provided)
+        #[arg(long)]
+        id: Option<String>,
     },
     /// List all issues
     List {
@@ -34,6 +37,12 @@ pub enum IssueSubcommand {
         /// Filter by project
         #[arg(long, short)]
         project: Option<String>,
+        /// Filter by issue ID
+        #[arg(long)]
+        id: Option<String>,
+        /// Filter by issue description
+        #[arg(long)]
+        description: Option<String>,
     },
     /// Show issue details
     Show {
@@ -78,11 +87,28 @@ pub enum IssueSubcommand {
 impl IssueArgs {
     pub async fn execute(&self, ctx: &AppContext) -> Result<()> {
         match &self.command {
-            IssueSubcommand::Create { title, description, project, priority } => {
+            IssueSubcommand::Create { title, description, project, priority, id } => {
                 let mut issue = Issue::new(
                     title.clone(),
                     std::env::var("USER").unwrap_or_else(|_| "unknown".to_string()), // Get from environment
                 );
+                
+                // Set custom ID if provided
+                if let Some(custom_id) = id {
+                    let issue_id = match uuid::Uuid::parse_str(custom_id) {
+                        Ok(uuid) => uuid,
+                        Err(_) => {
+                            eprintln!("❌ Invalid Issue ID");
+                            eprintln!("Issue ID must be a valid UUID");
+                            eprintln!("💡 Tip: Omit --id to auto-generate a UUID");
+                            return Err(crate::OdiError::Core(odi_core::CoreError::ValidationError {
+                                field: "issue_id".to_string(),
+                                message: format!("Invalid UUID format: {}", custom_id)
+                            }));
+                        }
+                    };
+                    issue.id = issue_id;
+                }
                 
                 // Set description if provided
                 if let Some(desc) = description {
@@ -94,7 +120,10 @@ impl IssueArgs {
                     issue.priority = p.clone();
                 }
                 
-                // TODO: Handle project assignment when project management is implemented
+                // Set project if provided
+                if let Some(project_id) = project {
+                    issue.project_id = Some(project_id.clone());
+                }
                 
                 let created_issue = ctx.issue_repository().create(issue).await
                     .map_err(crate::OdiError::Core)?;
@@ -102,24 +131,121 @@ impl IssueArgs {
                 println!("Created issue: {} ({})", created_issue.title, created_issue.id);
                 Ok(())
             },
-            IssueSubcommand::List { status, project } => {
-                let issues = ctx.issue_repository().list(odi_core::IssueQuery::default()).await
+            IssueSubcommand::List { status, project, id, description } => {
+                // Build query with filters
+                let mut query = odi_core::IssueQuery::default();
+                
+                if let Some(s) = status {
+                    query.status = Some(s.clone());
+                }
+                
+                if let Some(p) = project {
+                    query.project_id = Some(p.clone());
+                }
+                
+                let issues = ctx.issue_repository().list(query).await
                     .map_err(crate::OdiError::Core)?;
                 
-                if issues.is_empty() {
+                // Apply additional filtering that's not in the repository query
+                let filtered_issues: Vec<_> = issues.into_iter().filter(|issue| {
+                    // Filter by ID if specified
+                    if let Some(filter_id) = id {
+                        if !issue.id.to_string().contains(filter_id) {
+                            return false;
+                        }
+                    }
+                    
+                    // Filter by description if specified
+                    if let Some(filter_desc) = description {
+                        match &issue.description {
+                            Some(desc) => {
+                                if !desc.to_lowercase().contains(&filter_desc.to_lowercase()) {
+                                    return false;
+                                }
+                            },
+                            None => return false, // No description, but filter requires one
+                        }
+                    }
+                    
+                    true
+                }).collect();
+                
+                if filtered_issues.is_empty() {
                     println!("No issues found.");
                 } else {
                     println!("Issues:");
-                    for issue in issues {
-                        println!("  {} - {} [{:?}]", issue.title, issue.description.as_deref().unwrap_or("No description"), issue.status);
+                    for issue in filtered_issues {
+                        let assignee_str = if issue.assignees.is_empty() {
+                            "Unassigned".to_string()
+                        } else {
+                            format!("Assigned to: {}", issue.assignees.join(", "))
+                        };
+                        
+                        println!("  {} ({}) - {} [{:?}] {}", 
+                                 issue.title, 
+                                 issue.id,
+                                 issue.description.as_deref().unwrap_or("No description"), 
+                                 issue.status,
+                                 assignee_str);
                     }
                 }
                 Ok(())
             },
             IssueSubcommand::Show { id, project: _ } => {
-                // TODO: Implement issue show functionality
-                println!("Showing issue: {}", id);
-                println!("Note: Issue show functionality not yet implemented");
+                // Parse the ID as UUID
+                let issue_id = match uuid::Uuid::parse_str(id) {
+                    Ok(uuid) => uuid,
+                    Err(_) => {
+                        eprintln!("❌ Invalid Issue ID");
+                        eprintln!("Issue ID must be a valid UUID");
+                        eprintln!("💡 Tip: Use 'odi issue list' to see available issues");
+                        return Err(crate::OdiError::Core(odi_core::CoreError::ValidationError {
+                            field: "issue_id".to_string(),
+                            message: format!("Invalid UUID format: {}", id)
+                        }));
+                    }
+                };
+                
+                match ctx.issue_repository().get(&issue_id).await.map_err(crate::OdiError::Core)? {
+                    Some(issue) => {
+                        println!("Issue: {}", issue.title);
+                        println!("ID: {}", issue.id);
+                        if let Some(desc) = &issue.description {
+                            println!("Description: {}", desc);
+                        }
+                        println!("Status: {:?}", issue.status);
+                        println!("Priority: {:?}", issue.priority);
+                        println!("Author: {}", issue.author);
+                        
+                        if !issue.assignees.is_empty() {
+                            println!("Assignees: {}", issue.assignees.join(", "));
+                        }
+                        
+                        if let Some(project_id) = &issue.project_id {
+                            println!("Project: {}", project_id);
+                        }
+                        
+                        if !issue.labels.is_empty() {
+                            println!("Labels: {}", issue.labels.iter().map(|l| l.to_string()).collect::<Vec<_>>().join(", "));
+                        }
+                        
+                        println!("Created: {}", issue.created_at.format("%Y-%m-%d %H:%M:%S"));
+                        println!("Updated: {}", issue.updated_at.format("%Y-%m-%d %H:%M:%S"));
+                        
+                        if let Some(closed_at) = &issue.closed_at {
+                            println!("Closed: {}", closed_at.format("%Y-%m-%d %H:%M:%S"));
+                        }
+                    },
+                    None => {
+                        eprintln!("❌ Issue Not Found");
+                        eprintln!("Issue '{}' does not exist", id);
+                        eprintln!("💡 Tip: Use 'odi issue list' to see available issues");
+                        return Err(crate::OdiError::Core(odi_core::CoreError::ValidationError {
+                            field: "issue_id".to_string(),
+                            message: format!("Issue '{}' not found", id)
+                        }));
+                    }
+                }
                 Ok(())
             },
             IssueSubcommand::Assign { id, user, project: _ } => {

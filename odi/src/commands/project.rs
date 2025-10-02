@@ -19,12 +19,21 @@ pub enum ProjectSubcommand {
         /// Project description
         #[arg(long, short)]
         description: Option<String>,
+        /// Project ID
+        #[arg(long)]
+        id: Option<String>,
     },
     /// List all projects
     List {
         /// Output format
         #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
         format: OutputFormat,
+        /// Filter by project ID
+        #[arg(long)]
+        id: Option<String>,
+        /// Filter by project description
+        #[arg(long)]
+        description: Option<String>,
     },
     /// Show project details
     Show {
@@ -48,7 +57,7 @@ pub enum OutputFormat {
 impl ProjectArgs {
     pub async fn execute(&self, ctx: &AppContext) -> Result<()> {
         match &self.command {
-            ProjectSubcommand::Create { name, description } => {
+            ProjectSubcommand::Create { name, description, id } => {
                 // Validate project name
                 if name.trim().is_empty() {
                     eprintln!("❌ Invalid Project Name");
@@ -58,7 +67,24 @@ impl ProjectArgs {
                     return Err(crate::OdiError::Core(odi_core::CoreError::invalid_input("Invalid project name".to_string())));
                 }
 
-                // Check for duplicate names
+                let project_id = if let Some(custom_id) = id {
+                    // Validate custom ID
+                    if !odi_core::Project::validate_id(custom_id) {
+                        eprintln!("❌ Invalid Project ID");
+                        eprintln!("Project ID must be 3-100 characters, alphanumeric + ._-");
+                        eprintln!();
+                        eprintln!("💡 Tip: Use 'odi project create <name>' to auto-generate an ID");
+                        return Err(crate::OdiError::Core(odi_core::CoreError::ValidationError {
+                            field: "project_id".to_string(),
+                            message: format!("Invalid project ID: {}", custom_id)
+                        }));
+                    }
+                    custom_id.clone()
+                } else {
+                    format!("proj-{}", uuid::Uuid::new_v4().to_string()[0..8].to_string())
+                };
+
+                // Check for duplicate names and IDs
                 let existing_projects = ctx.project_repository().list_projects(odi_core::ProjectQuery::default()).await
                     .map_err(crate::OdiError::Core)?;
                 
@@ -73,7 +99,17 @@ impl ProjectArgs {
                     }));
                 }
                 
-                let project_id = format!("proj-{}", uuid::Uuid::new_v4().to_string()[0..8].to_string());
+                if existing_projects.iter().any(|p| p.id == project_id) {
+                    eprintln!("❌ Project ID Already Exists");
+                    eprintln!("A project with ID '{}' already exists", project_id);
+                    eprintln!();
+                    eprintln!("💡 Tip: Use a different ID or omit --id to auto-generate");
+                    return Err(crate::OdiError::Core(odi_core::CoreError::ValidationError {
+                        field: "project_id".to_string(),
+                        message: format!("Project ID '{}' already exists", project_id)
+                    }));
+                }
+                
                 let mut project = Project::new(project_id, name.clone());
                 
                 // Set description if provided
@@ -87,23 +123,47 @@ impl ProjectArgs {
                 println!("Created project: {} ({})", created_project.name, created_project.id);
                 Ok(())
             },
-            ProjectSubcommand::List { format } => {
+            ProjectSubcommand::List { format, id, description } => {
                 let projects = ctx.project_repository().list_projects(odi_core::ProjectQuery::default()).await
                     .map_err(crate::OdiError::Core)?;
                 
+                // Apply filters
+                let filtered_projects: Vec<_> = projects.into_iter().filter(|project| {
+                    // Filter by ID if specified
+                    if let Some(filter_id) = id {
+                        if !project.id.contains(filter_id) {
+                            return false;
+                        }
+                    }
+                    
+                    // Filter by description if specified
+                    if let Some(filter_desc) = description {
+                        match &project.description {
+                            Some(desc) => {
+                                if !desc.to_lowercase().contains(&filter_desc.to_lowercase()) {
+                                    return false;
+                                }
+                            },
+                            None => return false, // No description, but filter requires one
+                        }
+                    }
+                    
+                    true
+                }).collect();
+                
                 match format {
                     OutputFormat::Json => {
-                        let json_output = serde_json::to_string_pretty(&projects)
+                        let json_output = serde_json::to_string_pretty(&filtered_projects)
                             .map_err(|e| crate::OdiError::Io { message: e.to_string() })?;
                         println!("{}", json_output);
                     },
                     OutputFormat::Text => {
-                        if projects.is_empty() {
+                        if filtered_projects.is_empty() {
                             println!("No projects found.");
                         } else {
                             println!("Projects:");
-                            for project in projects {
-                                println!("  {} - {}", project.name, project.description.as_deref().unwrap_or("No description"));
+                            for project in filtered_projects {
+                                println!("  {} (ID: {}) - {}", project.name, project.id, project.description.as_deref().unwrap_or("No description"));
                             }
                         }
                     }
