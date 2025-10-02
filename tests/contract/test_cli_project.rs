@@ -5,7 +5,6 @@
 
 use assert_cmd::Command;
 use predicates::prelude::*;
-use std::fs;
 use tempfile::TempDir;
 
 fn setup_odi_workspace(temp_dir: &TempDir) {

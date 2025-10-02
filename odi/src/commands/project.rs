@@ -2,7 +2,7 @@
 
 use clap::{Args, Subcommand};
 use crate::{Result, AppContext};
-use odi_core::{Project, ProjectId, ProjectRepository};
+use odi_core::{Project, ProjectRepository};
 
 #[derive(Args)]
 pub struct ProjectArgs {

@@ -2,8 +2,7 @@
 
 use clap::{Args, Subcommand};
 use crate::{Result, AppContext};
-use odi_core::{Team, TeamId, UserId, User, UserRepository};
-use chrono::Utc;
+use odi_core::{Team, User, UserRepository};
 
 #[derive(Args)]
 pub struct TeamArgs {

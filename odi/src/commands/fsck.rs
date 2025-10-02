@@ -227,7 +227,7 @@ async fn check_object_store_structure(
     verbose: bool
 ) -> Result<()> {
     use std::path::Path;
-    use odi_fs::ObjectStorage;
+    
     
     let storage = ctx.storage();
     

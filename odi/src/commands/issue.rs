@@ -1,8 +1,8 @@
 //! Issue command implementation
 
-use clap::{Args, Subcommand, ValueEnum};
+use clap::{Args, Subcommand};
 use crate::{Result, AppContext};
-use odi_core::{Issue, IssueId, IssueStatus, Priority, UserId, IssueRepository};
+use odi_core::{Issue, IssueStatus, Priority, IssueRepository};
 
 #[derive(Args)]
 pub struct IssueArgs {

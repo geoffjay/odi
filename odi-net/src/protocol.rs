@@ -198,7 +198,7 @@ impl SshHandler {
 #[async_trait::async_trait]
 impl ProtocolHandler for HttpsHandler {
     async fn authenticate(&self, credentials: &crate::Credential) -> Result<AuthToken> {
-        use base64::Engine;
+        
         
         // Create basic auth header for HTTPS
         let auth_header = match credentials {
